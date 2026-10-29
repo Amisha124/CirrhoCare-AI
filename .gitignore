@@ -12,34 +12,43 @@ env/
 # Local package folders
 .python_packages/
 
-# Flask/local runtime
+# Flask/local runtime databases
 instance/*.db
+instance/*.sqlite
 *.sqlite
 *.sqlite3
 
-# ML generated files
+# ML generated files (keep pre-trained random forest model)
 app/ml_model/*.pkl
 !app/ml_model/liver_rf_model.pkl
 
-# Uploads and local files
+# Uploads, patient reports, and local files (prevent committing PHI / patient PDFs)
 app/static/uploads/*
 !app/static/uploads/.gitkeep
 instance/uploads/*
 !instance/uploads/.gitkeep
+instance/demo_uploads/*
+!instance/demo_uploads/.gitkeep
 
 # Editor/system files
 .vscode/
+.idea/
 .DS_Store
 Thumbs.db
 
 # Environment secrets
 .env
+.env.*
+!.env.example
 
-# Temporary and generated files
-/scratch/
-/test-results/
-/frontend/test-results/
-/frontend/scripts/current_anil_dashboard.png
-/frontend/scripts/current_anil_full.png
+# Logs
+*.log
+logs/
+
+# Temporary and generated test files
+scratch/
+test-results/
+frontend/test-results/
+frontend/scripts/*.png
 *.tsbuildinfo
-/tests/pre_test_db_snapshot.json
+tests/pre_test_db_snapshot.json
