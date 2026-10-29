@@ -276,7 +276,9 @@ def generate_demo_report_pdf(report, patient=None, output_path=None):
     story = []
 
     # Safe attributes extraction
-    rep_id = getattr(report, "id", "DEMO")
+    raw_rep_id = getattr(report, "id", None) or 1001
+    rep_id = raw_rep_id
+    rep_id_str = f"REP-{raw_rep_id:04d}" if isinstance(raw_rep_id, int) else f"REP-{raw_rep_id}"
     rep_name = getattr(report, "original_filename", "Clinical_Report.pdf")
     category = getattr(report, "category", "Lab report")
     upload_dt = getattr(report, "uploaded_at", datetime.now(timezone.utc))
@@ -299,9 +301,9 @@ def generate_demo_report_pdf(report, patient=None, output_path=None):
     copper = getattr(patient, "copper", 85.0) or 85.0
     alk = getattr(patient, "alk_phos", 95.0) or 95.0
     trig = getattr(patient, "triglycerides", 120.0) or 120.0
-    risk_label = getattr(patient, "latest_risk_label", "Moderate Risk")
-    risk_pct = getattr(patient, "latest_risk_percent", 45.0)
-    treatment_status = getattr(patient, "treatment_status", "Under review")
+    risk_label = getattr(patient, "latest_risk_label", "Moderate Risk") or "Moderate Risk"
+    risk_pct = getattr(patient, "latest_risk_percent", 45.0) if getattr(patient, "latest_risk_percent", None) is not None else 45.0
+    treatment_status = getattr(patient, "treatment_status", "Under review") or "Under review"
     ascites = getattr(patient, "ascites", False)
     edema = getattr(patient, "edema", False)
     spiders = getattr(patient, "spiders", False)
@@ -340,7 +342,7 @@ def generate_demo_report_pdf(report, patient=None, output_path=None):
             Paragraph("Patient Name:", st["meta_label"]),
             Paragraph(f"<b>{p_name}</b>", st["meta_value"]),
             Paragraph("Report ID / Category:", st["meta_label"]),
-            Paragraph(f"<b>REP-{rep_id:04d}</b> ({category})", st["meta_value"]),
+            Paragraph(f"<b>{rep_id_str}</b> ({category})", st["meta_value"]),
         ],
         [
             Paragraph("Portal MRN:", st["meta_label"]),
@@ -836,7 +838,7 @@ def generate_clinical_patient_report_pdf(
             Paragraph("Patient Name:", st["meta_label"]),
             Paragraph(f"<b>{p_name}</b>", st["meta_value"]),
             Paragraph("Report ID / Category:", st["meta_label"]),
-            Paragraph(f"<b>REP-{rep_id:04d}</b> ({category})", st["meta_value"]),
+            Paragraph(f"<b>{rep_id_str}</b> ({category})", st["meta_value"]),
         ],
         [
             Paragraph("Portal Patient ID:", st["meta_label"]),

@@ -184,7 +184,10 @@ def create_app(portal="admin", test_config=None):
         db.create_all()
         ensure_sqlite_schema()
         migrate_existing_uploads()
+        from app.models.patient import Patient
+        from app.models.user import User
         from app.utils.demo_provisioning import is_demo_allowed
+
         if is_demo_allowed(app):
             from app.utils.demo_provisioning import ensure_demo_accounts_provisioned
             ensure_demo_accounts_provisioned(app)
@@ -192,10 +195,11 @@ def create_app(portal="admin", test_config=None):
             ensure_demo_prescriptions_seeded(app)
         else:
             print("[CirrhoCare AI] Production mode: Demo account and prescription seeders skipped.")
-            from app.models.user import User
-            if User.query.count() == 0:
-                print("[CirrhoCare AI] Fresh database detected. Creating initial clinical accounts...")
-                from seed import seed_initial_users
-                seed_initial_users()
+
+        if not app.config.get("TESTING"):
+            if User.query.count() == 0 or Patient.query.count() == 0:
+                print("[CirrhoCare AI] Baseline clinical records missing. Initializing verified clinical dataset...")
+                from app.utils.clinical_seed import seed_baseline_clinical_data
+                seed_baseline_clinical_data(app)
 
     return app

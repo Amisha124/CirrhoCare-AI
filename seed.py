@@ -1,6 +1,7 @@
 from app import create_app
 from app.models import db
 from app.models.user import User
+from app.utils.clinical_seed import seed_baseline_clinical_data
 
 
 def create_user(name, email, role, password, portal_id=None):
@@ -19,7 +20,7 @@ def seed_initial_users():
     create_user("System Admin", "admin@careai.com", "admin", "Admin@123")
     create_user("Lab Technician", "lab@careai.com", "labtech", "Lab@123")
     create_user("Dr. Hepato Care", "doctor@careai.com", "hepatologist", "Doctor@123")
-    create_user("Patient Demo", "patient@careai.com", "patient", "Patient@123", "PAT-1001")
+    create_user("Eleanor Vance [DEMO]", "patient@careai.com", "patient", "Patient@123", "PAT-1001")
     db.session.commit()
     print("Default clinical accounts are ready.")
 
@@ -27,5 +28,4 @@ def seed_initial_users():
 if __name__ == "__main__":
     app = create_app()
     with app.app_context():
-        seed_initial_users()
-
+        seed_baseline_clinical_data(app)
