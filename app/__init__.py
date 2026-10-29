@@ -184,9 +184,13 @@ def create_app(portal="admin", test_config=None):
         db.create_all()
         ensure_sqlite_schema()
         migrate_existing_uploads()
-        from app.utils.demo_provisioning import ensure_demo_accounts_provisioned
-        ensure_demo_accounts_provisioned(app)
-        from app.utils.demo_prescriptions import ensure_demo_prescriptions_seeded
-        ensure_demo_prescriptions_seeded(app)
+        from app.utils.demo_provisioning import is_demo_allowed
+        if is_demo_allowed(app):
+            from app.utils.demo_provisioning import ensure_demo_accounts_provisioned
+            ensure_demo_accounts_provisioned(app)
+            from app.utils.demo_prescriptions import ensure_demo_prescriptions_seeded
+            ensure_demo_prescriptions_seeded(app)
+        else:
+            print("[CirrhoCare AI] Production mode: Demo account and prescription seeders skipped.")
 
     return app

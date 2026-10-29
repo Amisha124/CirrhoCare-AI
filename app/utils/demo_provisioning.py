@@ -110,15 +110,15 @@ def ensure_demo_accounts_provisioned(app=None, force=False):
 
     db_uri = str(target_app.config.get("SQLALCHEMY_DATABASE_URI", "")).replace("\\", "/").lower()
 
+    if not is_demo_allowed(target_app):
+        return {"provisioned": 0, "status": "demo_disabled"}
+
     # Critical security guard: never execute against production database
     if "instance/cirrhosis.db" in db_uri or db_uri.endswith("/cirrhosis.db"):
         raise RuntimeError(
             "CRITICAL SECURITY GUARD: ensure_demo_accounts_provisioned() must never be executed "
             "against the production database (instance/cirrhosis.db)!"
         )
-
-    if not is_demo_allowed(target_app):
-        return {"provisioned": 0, "status": "demo_disabled"}
 
     # Guard: for startup seeding, only auto-run if targeting demo_cirrhosis.db
     if not force and "demo_cirrhosis.db" not in db_uri:
