@@ -27,10 +27,12 @@ if [ ! -f "frontend/dist/index.html" ]; then
 fi
 echo "Verified frontend/dist/index.html exists."
 
-echo "[3/3] Ensuring runtime directories exist..."
+echo "[3/3] Ensuring runtime directories and baseline database exist..."
 mkdir -p instance/uploads
 mkdir -p instance/demo_uploads
+python seed.py || true
 
 echo "=========================================================="
 echo "== CirrhoCare AI Build Succeeded Successfully!           =="
 echo "=========================================================="
+

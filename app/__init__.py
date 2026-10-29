@@ -192,5 +192,10 @@ def create_app(portal="admin", test_config=None):
             ensure_demo_prescriptions_seeded(app)
         else:
             print("[CirrhoCare AI] Production mode: Demo account and prescription seeders skipped.")
+            from app.models.user import User
+            if User.query.count() == 0:
+                print("[CirrhoCare AI] Fresh database detected. Creating initial clinical accounts...")
+                from seed import seed_initial_users
+                seed_initial_users()
 
     return app

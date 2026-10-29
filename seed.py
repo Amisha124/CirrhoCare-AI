@@ -15,12 +15,17 @@ def create_user(name, email, role, password, portal_id=None):
     return user
 
 
-app = create_app()
-
-with app.app_context():
+def seed_initial_users():
     create_user("System Admin", "admin@careai.com", "admin", "Admin@123")
     create_user("Lab Technician", "lab@careai.com", "labtech", "Lab@123")
     create_user("Dr. Hepato Care", "doctor@careai.com", "hepatologist", "Doctor@123")
     create_user("Patient Demo", "patient@careai.com", "patient", "Patient@123", "PAT-1001")
     db.session.commit()
-    print("Demo users are ready.")
+    print("Default clinical accounts are ready.")
+
+
+if __name__ == "__main__":
+    app = create_app()
+    with app.app_context():
+        seed_initial_users()
+
