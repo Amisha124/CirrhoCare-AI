@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" x-data="layoutState()" :class="{ 'dark': dark }">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "CirrhosisCare AI" }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { colors: { lavender: { 50: '#faf7ff', 100: '#f3e8ff', 200: '#e9d5ff' } } } } }
+  </script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</head>
+<body class="lavender-bg min-h-screen text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+  {% if current_user.is_authenticated %}
+  <div class="min-h-screen md:flex">
+    {% include "shared/sidebar.html" %}
+    <main class="flex-1 p-4 md:p-8">
+      {% include "shared/topbar.html" %}
+      {% include "shared/flash.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    {% include "shared/flash.html" %}
+    {% block public_content %}{% endblock %}
+  {% endif %}
+</body>
+</html>

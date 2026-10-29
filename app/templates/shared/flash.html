@@ -1,0 +1,5 @@
+<div class="fixed right-4 top-4 z-50 space-y-2" x-data="{ show: true }" x-init="setTimeout(() => show=false, 4200)" x-show="show" x-transition>
+  {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="rounded-2xl border border-purple-100 bg-white px-5 py-3 text-sm font-semibold shadow-xl">{{ message }}</div>
+  {% endfor %}
+</div>

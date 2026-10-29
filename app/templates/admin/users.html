@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% set page_title = "Manage Users" %}
+{% block content %}
+<form class="mb-5 grid gap-3 md:grid-cols-[1fr_220px_auto]">
+  <input class="input" name="q" placeholder="Search users" value="{{ request.args.get('q','') }}">
+  <select class="input" name="role">
+    <option value="">All roles</option>
+    <option value="labtech">Lab Technicians</option>
+    <option value="hepatologist">Hepatologists</option>
+    <option value="admin">Admins</option>
+  </select>
+  <button class="btn-primary">Filter</button>
+</form>
+<div class="glass-card overflow-hidden rounded-2xl">
+  <table class="w-full text-left text-sm">
+    <thead class="bg-lavender-100"><tr><th class="p-4">Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for user in users %}
+      <tr class="border-t border-purple-100">
+        <td class="p-4 font-bold">{{ user.name }}</td><td>{{ user.email }}</td><td class="capitalize">{{ user.role }}</td><td>{{ "Active" if user.active else "Disabled" }}</td>
+        <td><form method="post" action="{{ url_for('admin.toggle_user', user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="rounded-xl bg-white px-3 py-2 font-bold shadow">Toggle</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set page_title = "All Patients" %}
+{% block content %}
+<form class="mb-5 grid gap-3 md:grid-cols-[1fr_220px_auto]">
+  <input class="input" name="q" placeholder="Search patients" value="{{ request.args.get('q','') }}">
+  <select class="input" name="risk">
+    <option value="">All risks</option><option>Low Risk</option><option>Medium Risk</option><option>High Risk</option>
+  </select>
+  <button class="btn-primary">Filter</button>
+</form>
+{% include "shared/patient_table.html" %}
+{% endblock %}

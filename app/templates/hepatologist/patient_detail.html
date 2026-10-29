@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set page_title = "Patient Treatment" %}
+{% block content %}
+<section class="grid gap-6 lg:grid-cols-[.85fr_1fr]">
+  <div class="glass-card rounded-2xl p-6">
+    <h2 class="text-3xl font-black">{{ patient.full_name }}</h2>
+    <p class="mt-2 text-slate-500">{{ patient.age }} years · {{ patient.gender }}</p>
+    <p class="mt-3 rounded-2xl bg-lavender-100 px-4 py-3 text-sm font-black text-purple-700">Patient Login ID: {{ patient.portal_id }}</p>
+    <div class="mt-5 rounded-2xl bg-white p-5 shadow">
+      <p class="text-sm font-bold text-slate-500">Latest Risk</p>
+      <strong class="text-4xl text-purple-700">{{ patient.latest_risk_percent }}%</strong>
+      <p class="font-black">{{ patient.latest_risk_label }}</p>
+    </div>
+    <h3 class="mt-6 font-black">Uploaded Reports</h3>
+    <div class="mt-3 space-y-2">
+      {% for report in patient.reports %}
+      <a class="block rounded-2xl bg-white p-3 font-bold shadow" href="{{ url_for('main.download_report', report_id=report.id) }}" target="_blank">{{ report.original_filename }}</a>
+      {% else %}<p class="text-sm text-slate-500">No reports uploaded.</p>{% endfor %}
+    </div>
+  </div>
+  <form method="post" class="glass-card rounded-2xl p-6">
+    {{ form.hidden_tag() }}
+    <h3 class="mb-4 text-xl font-black">Add Prescription</h3>
+    <div class="grid gap-4 md:grid-cols-2">
+      <label class="text-sm font-bold">Medicine {{ form.medicine(class="input mt-2") }}</label>
+      <label class="text-sm font-bold">Dosage {{ form.dosage(class="input mt-2") }}</label>
+      <label class="text-sm font-bold">Frequency days {{ form.frequency_days(class="input mt-2") }}</label>
+      <label class="text-sm font-bold">Follow-up {{ form.follow_up_date(class="input mt-2") }}</label>
+      <label class="text-sm font-bold md:col-span-2">Treatment status {{ form.treatment_status(class="input mt-2") }}</label>
+      <label class="text-sm font-bold md:col-span-2">Clinical notes {{ form.clinical_notes(class="input mt-2", rows="4") }}</label>
+      <label class="text-sm font-bold md:col-span-2">Diet suggestion for patient {{ form.diet_suggestion(class="input mt-2", rows="4", placeholder="Low sodium meals, high protein as clinically suitable, avoid alcohol, hydration guidance") }}</label>
+    </div>
+    {{ form.submit(class="btn-primary mt-5") }}
+  </form>
+</section>
+<section class="mt-6 glass-card rounded-2xl p-6">
+  <h3 class="mb-4 text-xl font-black">Patient History Timeline</h3>
+  <div class="space-y-3">
+    {% for prescription in patient.prescriptions|reverse %}
+    <div class="rounded-2xl bg-white p-4 shadow">
+      <strong>{{ prescription.medicine }} · {{ prescription.dosage }}</strong>
+      <p class="text-sm text-slate-500">{{ prescription.frequency_days }} days · Follow-up {{ prescription.follow_up_date or "Not set" }}</p>
+      <p class="mt-2">{{ prescription.clinical_notes }}</p>
+      {% if prescription.diet_suggestion %}
+      <div class="mt-3 rounded-2xl bg-lavender-100 p-3">
+        <strong class="text-purple-800">Diet suggestion</strong>
+        <p class="text-sm">{{ prescription.diet_suggestion }}</p>
+      </div>
+      {% endif %}
+      <a class="mt-3 inline-block font-bold text-purple-700" href="{{ url_for('hepatologist.print_prescription', prescription_id=prescription.id) }}">Print prescription</a>
+    </div>
+    {% else %}<p class="text-slate-500">No prescriptions yet.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

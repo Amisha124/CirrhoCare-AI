@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block public_content %}
+<main class="mx-auto grid min-h-screen max-w-7xl items-center gap-8 px-6 py-10 lg:grid-cols-[1fr_.85fr]">
+  <section>
+    <p class="mb-3 font-bold text-purple-600">AI-powered liver care operations</p>
+    <h1 class="max-w-4xl text-5xl font-black tracking-tight text-slate-950 md:text-7xl">CirrhosisCare AI</h1>
+    <p class="mt-5 max-w-2xl text-lg text-slate-600">Predict liver cirrhosis risk, coordinate lab uploads, prescribe treatment, and monitor patient history from one responsive medical workspace.</p>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a class="btn-primary" href="{{ url_for('auth.login') }}">Login</a>
+      <a class="rounded-2xl border border-purple-200 bg-white px-5 py-3 font-bold shadow hover:bg-lavender-50" href="{{ url_for('auth.register') }}">Register</a>
+    </div>
+  </section>
+  <section class="glass-card rounded-2xl p-6">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="rounded-2xl bg-white p-5 shadow-xl"><p class="text-sm text-slate-500">Risk AI</p><strong class="text-3xl text-purple-700">RF</strong></div>
+      <div class="rounded-2xl bg-white p-5 shadow-xl"><p class="text-sm text-slate-500">Roles</p><strong class="text-3xl text-purple-700">4</strong></div>
+      <div class="rounded-2xl bg-white p-5 shadow-xl"><p class="text-sm text-slate-500">Reports</p><strong class="text-3xl text-purple-700">PDF</strong></div>
+      <div class="rounded-2xl bg-white p-5 shadow-xl"><p class="text-sm text-slate-500">Audit</p><strong class="text-3xl text-purple-700">Logs</strong></div>
+    </div>
+  </section>
+</main>
+{% endblock %}

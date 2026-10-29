@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set page_title = "Reports" %}
+{% block content %}
+<div class="glass-card rounded-2xl p-6">
+  <div class="grid gap-3 md:grid-cols-2">
+    {% for report in reports %}
+    <a class="rounded-2xl bg-white p-4 shadow transition hover:-translate-y-1" href="{{ url_for('main.download_report', report_id=report.id) }}" target="_blank">
+      <strong>{{ report.original_filename }}</strong>
+      <p class="text-sm text-slate-500">{{ report.patient.full_name }} · {{ report.uploaded_at.strftime("%d %b %Y") }}</p>
+    </a>
+    {% else %}
+    <p class="text-slate-500">No uploaded reports yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

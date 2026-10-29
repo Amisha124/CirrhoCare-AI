@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% set page_title = "Prediction Result" %}
+{% block content %}
+<section class="grid gap-6 lg:grid-cols-[.8fr_1fr]">
+  <div class="glass-card rounded-2xl p-6">
+    <p class="text-sm font-bold text-slate-500">Patient</p>
+    <h2 class="text-3xl font-black">{{ patient.full_name }}</h2>
+    <p class="mt-2 rounded-2xl bg-lavender-100 px-4 py-3 text-sm font-black text-purple-700">Patient Login ID: {{ patient.portal_id }}</p>
+    <div class="mt-2 rounded-2xl bg-white p-3 text-xs text-slate-600 shadow">
+      <p class="font-bold text-slate-800">Patient Portal Authentication</p>
+      <p class="mt-0.5">Patients authenticate using their Patient ID, registered name, and private secret PIN. Initial PIN is generated at registration; if forgotten, authorized staff can issue a reset from the Patients directory.</p>
+    </div>
+    <div class="mt-5 rounded-2xl bg-white p-5 shadow">
+      <p class="text-sm font-bold text-slate-500">Risk Probability</p>
+      <strong class="text-5xl text-purple-700">{{ patient.latest_risk_percent }}%</strong>
+      <p class="mt-2 font-black">{{ patient.latest_risk_label }}</p>
+    </div>
+    {% if latest %}<p class="mt-4 text-sm text-slate-500">Confidence score: {{ latest.confidence }}%</p>{% endif %}
+  </div>
+  <div class="glass-card rounded-2xl p-6">
+    <h3 class="mb-4 text-xl font-black">Prediction History</h3>
+    <div class="space-y-3">
+      {% for prediction in patient.predictions|reverse %}
+      <div class="rounded-2xl bg-white p-4 shadow">
+        <strong>{{ prediction.risk_label }} · {{ prediction.probability }}%</strong>
+        <p class="text-sm text-slate-500">{{ prediction.created_at.strftime("%d %b %Y %H:%M") }} · {{ prediction.model_name }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set page_title = "Patient Profile" %}
+{% block content %}
+<section class="grid gap-6 xl:grid-cols-[.8fr_1.2fr]">
+  <div class="space-y-6">
+    <div class="glass-card rounded-2xl p-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-bold text-purple-600">Patient Login ID: {{ patient.portal_id or "Not generated" }}</p>
+          <h2 class="text-3xl font-black">{{ patient.full_name }}</h2>
+          <p class="mt-2 text-slate-500">{{ patient.age }} years · {{ patient.gender }} · {{ patient.phone or "No phone" }}</p>
+        </div>
+        <span class="rounded-full px-3 py-1 text-xs font-black {% if patient.latest_risk_label == 'High Risk' %}badge-high{% elif patient.latest_risk_label == 'Medium Risk' %}badge-medium{% else %}badge-low{% endif %}">{{ patient.latest_risk_label }}</span>
+      </div>
+      <div class="mt-6 rounded-2xl bg-white p-5 shadow">
+        <p class="text-sm font-bold text-slate-500">Risk Probability</p>
+        <strong class="text-5xl text-purple-700">{{ patient.latest_risk_percent }}%</strong>
+        <div class="mt-4 h-3 rounded-full bg-purple-100"><div class="h-3 rounded-full bg-purple-500" style="width: {{ patient.latest_risk_percent }}%"></div></div>
+      </div>
+      <div class="mt-4 rounded-2xl bg-lavender-100 p-4">
+        <strong class="text-purple-800">Patient Portal Credentials</strong>
+        <p class="mt-1 text-sm">Patient can log in using Patient ID <b>{{ patient.portal_id }}</b>, their registered name, and their private secret PIN. Initial PIN is provided upon registration; if the patient forgets their PIN, authorized staff can issue a reset from the Patients management console.</p>
+      </div>
+    </div>
+
+    <form method="post" class="glass-card rounded-2xl p-6">
+      {{ appointment_form.hidden_tag() }}
+      <h3 class="mb-4 text-xl font-black">Schedule Hepatology Appointment</h3>
+      <div class="space-y-4">
+        <label class="block text-sm font-bold">Doctor {{ appointment_form.doctor_id(class="input mt-2") }}</label>
+        <label class="block text-sm font-bold">Date and time {{ appointment_form.scheduled_at(class="input mt-2") }}</label>
+        <label class="block text-sm font-bold">Reason {{ appointment_form.reason(class="input mt-2", placeholder="Follow-up for high-risk prediction") }}</label>
+      </div>
+      {{ appointment_form.submit(class="btn-primary mt-5") }}
+    </form>
+  </div>
+
+  <div class="space-y-6">
+    <div class="glass-card rounded-2xl p-6">
+      <h3 class="mb-4 text-xl font-black">Lab Snapshot</h3>
+      <div class="grid gap-3 md:grid-cols-4">
+        {% for label, value in [("Bilirubin", patient.bilirubin), ("Albumin", patient.albumin), ("SGOT", patient.sgot), ("SGPT", patient.sgpt), ("Platelets", patient.platelets), ("Cholesterol", patient.cholesterol), ("Prothrombin", patient.prothrombin), ("Copper", patient.copper), ("Alk Phos", patient.alk_phos), ("Triglycerides", patient.triglycerides)] %}
+        <div class="rounded-2xl bg-white p-4 shadow">
+          <p class="text-xs font-bold text-slate-500">{{ label }}</p>
+          <strong class="text-lg text-purple-700">{{ value }}</strong>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="glass-card rounded-2xl p-6">
+      <h3 class="mb-4 text-xl font-black">Patient Timeline</h3>
+      <div class="space-y-3">
+        <div class="rounded-2xl bg-white p-4 shadow"><strong>Patient record created</strong><p class="text-sm text-slate-500">{{ patient.created_at.strftime("%d %b %Y %H:%M") }}</p></div>
+        {% for prediction in patient.predictions|reverse %}
+        <div class="rounded-2xl bg-white p-4 shadow"><strong>Prediction: {{ prediction.risk_label }} · {{ prediction.probability }}%</strong><p class="text-sm text-slate-500">{{ prediction.created_at.strftime("%d %b %Y %H:%M") }}</p></div>
+        {% endfor %}
+        {% for report in patient.reports|reverse %}
+        <div class="rounded-2xl bg-white p-4 shadow"><strong>Report uploaded</strong><p class="text-sm text-slate-500">{{ report.original_filename }} · {{ report.uploaded_at.strftime("%d %b %Y %H:%M") }}</p></div>
+        {% endfor %}
+        {% for appointment in patient.appointments|reverse %}
+        <div class="rounded-2xl bg-white p-4 shadow"><strong>Appointment {{ appointment.status }}</strong><p class="text-sm text-slate-500">{{ appointment.scheduled_at.strftime("%d %b %Y %H:%M") }} · {{ appointment.reason }}</p></div>
+        {% endfor %}
+        {% for prescription in patient.prescriptions|reverse %}
+        <div class="rounded-2xl bg-white p-4 shadow"><strong>Prescription: {{ prescription.medicine }}</strong><p class="text-sm text-slate-500">{{ prescription.created_at.strftime("%d %b %Y %H:%M") }} · Follow-up {{ prescription.follow_up_date or "Not set" }}</p></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

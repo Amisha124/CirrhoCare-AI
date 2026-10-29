@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% set page_title = title %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="glass-card rounded-2xl p-6">
+  {{ form.hidden_tag() }}
+  <div class="grid gap-4 md:grid-cols-3">
+    {% for field, span in [(form.full_name, "md:col-span-2"), (form.age, ""), (form.gender, ""), (form.phone, ""), (form.email, "")] %}
+    <label class="text-sm font-bold {{ span }}">
+      {{ field.label.text }}
+      {{ field(class="input mt-2") }}
+      {% for error in field.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+    </label>
+    {% endfor %}
+  </div>
+  <h2 class="mb-4 mt-8 text-xl font-black">Lab Parameters</h2>
+  <div class="grid gap-4 md:grid-cols-4">
+    {% for field in [form.bilirubin, form.albumin, form.sgot, form.sgpt, form.platelets, form.cholesterol, form.prothrombin, form.copper, form.alk_phos, form.triglycerides] %}
+    <label class="text-sm font-bold">
+      {{ field.label.text }}
+      {{ field(class="input mt-2") }}
+      {% for error in field.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+    </label>
+    {% endfor %}
+  </div>
+  <div class="mt-6 grid gap-3 md:grid-cols-4">
+    {% for field in [form.ascites, form.hepatomegaly, form.spiders, form.edema] %}
+    <label class="flex items-center gap-3 rounded-2xl bg-white p-4 font-bold shadow">{{ field() }} {{ field.label.text }}</label>
+    {% endfor %}
+  </div>
+  <label class="mt-6 block text-sm font-bold">
+    Upload lab report or image
+    {{ form.report(class="input mt-2") }}
+    {% for error in form.report.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+  </label>
+  <div class="mt-6 flex gap-3">
+    {{ form.submit(class="btn-primary") }}
+    <a class="rounded-2xl bg-white px-5 py-3 font-bold shadow" href="{{ url_for('labtech.dashboard') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

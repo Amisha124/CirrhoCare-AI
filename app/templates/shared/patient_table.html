@@ -1,0 +1,32 @@
+<div class="glass-card overflow-x-auto rounded-2xl">
+  <table class="w-full min-w-[820px] text-left text-sm">
+    <thead class="bg-lavender-100"><tr><th class="p-4">Patient</th><th>Age</th><th>Gender</th><th>Risk</th><th>Risk %</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for patient in patients %}
+      <tr class="border-t border-purple-100">
+        <td class="p-4 font-bold">
+          {{ patient.full_name }}
+          {% if patient.portal_id %}<p class="text-xs text-purple-600">ID: {{ patient.portal_id }}</p>{% endif %}
+        </td>
+        <td>{{ patient.age }}</td>
+        <td>{{ patient.gender }}</td>
+        <td><span class="rounded-full px-3 py-1 text-xs font-black {% if patient.latest_risk_label == 'High Risk' %}badge-high{% elif patient.latest_risk_label == 'Medium Risk' %}badge-medium{% else %}badge-low{% endif %}">{{ patient.latest_risk_label }}</span></td>
+        <td class="font-black text-purple-700">{{ patient.latest_risk_percent }}%</td>
+        <td>{{ patient.treatment_status }}</td>
+        <td class="flex gap-2 py-3">
+          <a class="rounded-xl bg-white px-3 py-2 font-bold shadow" href="{{ url_for('labtech.patient_detail', patient_id=patient.id) }}">Profile</a>
+          <a class="rounded-xl bg-white px-3 py-2 font-bold shadow" href="{{ url_for('labtech.prediction_result', patient_id=patient.id) }}">Risk</a>
+          {% if current_user.role in ["labtech", "admin"] %}
+          <a class="rounded-xl bg-white px-3 py-2 font-bold shadow" href="{{ url_for('labtech.edit_patient', patient_id=patient.id) }}">Edit</a>
+          {% endif %}
+          {% if current_user.role == "hepatologist" %}
+          <a class="rounded-xl bg-purple-100 px-3 py-2 font-bold text-purple-800" href="{{ url_for('hepatologist.patient_detail', patient_id=patient.id) }}">Treat</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td class="p-6 text-slate-500" colspan="7">No patients found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

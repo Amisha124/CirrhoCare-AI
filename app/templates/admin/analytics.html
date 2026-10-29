@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set page_title = "Prediction Analytics" %}
+{% block content %}
+<div class="glass-card rounded-2xl p-6">
+  <h2 class="mb-4 text-xl font-black">Recent Predictions</h2>
+  <div class="space-y-3">
+    {% for prediction in predictions %}
+    <div class="grid items-center gap-3 rounded-2xl bg-white p-4 shadow md:grid-cols-[1fr_160px_160px]">
+      <strong>{{ prediction.patient.full_name }}</strong>
+      <span>{{ prediction.risk_label }}</span>
+      <span class="font-black text-purple-700">{{ prediction.probability }}%</span>
+    </div>
+    {% else %}
+    <p class="text-slate-500">No predictions yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

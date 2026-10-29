@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Local package folders
+.python_packages/
+
+# Flask/local runtime
+instance/*.db
+*.sqlite
+*.sqlite3
+
+# ML generated files
+app/ml_model/*.pkl
+!app/ml_model/liver_rf_model.pkl
+
+# Uploads and local files
+app/static/uploads/*
+!app/static/uploads/.gitkeep
+instance/uploads/*
+!instance/uploads/.gitkeep
+
+# Editor/system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Environment secrets
+.env
+
+# Temporary and generated files
+/scratch/
+/test-results/
+/frontend/test-results/
+/frontend/scripts/current_anil_dashboard.png
+/frontend/scripts/current_anil_full.png
+*.tsbuildinfo
+/tests/pre_test_db_snapshot.json

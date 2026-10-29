@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Prescription</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-white p-10 text-slate-900" onload="window.print()">
+  <main class="mx-auto max-w-3xl">
+    <h1 class="text-3xl font-black text-purple-700">CirrhosisCare AI Prescription</h1>
+    <p class="mt-4"><strong>Patient:</strong> {{ prescription.patient.full_name }}</p>
+    <p><strong>Doctor:</strong> {{ prescription.doctor.name }}</p>
+    <hr class="my-6">
+    <p><strong>Medicine:</strong> {{ prescription.medicine }}</p>
+    <p><strong>Dosage:</strong> {{ prescription.dosage }}</p>
+    <p><strong>Frequency:</strong> {{ prescription.frequency_days }} days</p>
+    <p><strong>Follow-up:</strong> {{ prescription.follow_up_date or "Not set" }}</p>
+    <p class="mt-4"><strong>Clinical notes:</strong><br>{{ prescription.clinical_notes }}</p>
+    {% if prescription.diet_suggestion %}
+    <p class="mt-4"><strong>Diet suggestion:</strong><br>{{ prescription.diet_suggestion }}</p>
+    {% endif %}
+  </main>
+</body></html>

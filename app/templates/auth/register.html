@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block public_content %}
+<main class="flex min-h-screen items-center justify-center px-4 py-8">
+  <form method="post" class="glass-card w-full max-w-lg rounded-2xl p-8">
+    {{ form.hidden_tag() }}
+    <h1 class="mb-6 text-3xl font-black">Create account</h1>
+    <div class="grid gap-4 sm:grid-cols-2">
+      {% for field in [form.name, form.email, form.role] %}
+      <label class="block text-sm font-bold sm:col-span-2">
+        {{ field.label.text }}
+        {{ field(class="input mt-2") }}
+        {% for error in field.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+      </label>
+      {% endfor %}
+      {% for field in [form.password, form.confirm_password] %}
+      <label class="block text-sm font-bold">
+        {{ field.label.text }}
+        {{ field(class="input mt-2") }}
+        {% for error in field.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+      </label>
+      {% endfor %}
+    </div>
+    {{ form.submit(class="btn-primary mt-6 w-full") }}
+  </form>
+</main>
+{% endblock %}

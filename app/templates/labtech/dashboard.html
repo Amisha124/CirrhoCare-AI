@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% set page_title = "Lab Dashboard" %}
+{% block content %}
+<section class="mb-5 grid gap-4 md:grid-cols-3">
+  <div class="glass-card rounded-2xl p-5"><p class="text-sm font-bold text-slate-500">Total Records</p><strong class="text-4xl text-purple-700">{{ patients|length }}</strong></div>
+  <div class="glass-card rounded-2xl p-5"><p class="text-sm font-bold text-slate-500">High Risk</p><strong class="text-4xl text-purple-700">{{ patients|selectattr("latest_risk_label", "equalto", "High Risk")|list|length }}</strong></div>
+  <div class="glass-card rounded-2xl p-5"><p class="text-sm font-bold text-slate-500">Uploads</p><strong class="text-4xl text-purple-700">Ready</strong></div>
+</section>
+<section class="mb-5 glass-card rounded-2xl p-5">
+  <h2 class="mb-4 text-xl font-black">Lab Operations Queue</h2>
+  <div class="grid gap-3 md:grid-cols-3">
+    <div class="rounded-2xl bg-white p-4 shadow"><p class="text-sm text-slate-500">Awaiting Doctor Review</p><strong class="text-2xl text-purple-700">{{ patients|selectattr("treatment_status", "equalto", "Awaiting review")|list|length }}</strong></div>
+    <div class="rounded-2xl bg-white p-4 shadow"><p class="text-sm text-slate-500">Medium Risk</p><strong class="text-2xl text-purple-700">{{ patients|selectattr("latest_risk_label", "equalto", "Medium Risk")|list|length }}</strong></div>
+    <div class="rounded-2xl bg-white p-4 shadow"><p class="text-sm text-slate-500">Completed Predictions</p><strong class="text-2xl text-purple-700">{{ patients|rejectattr("latest_risk_label", "equalto", "Pending")|list|length }}</strong></div>
+  </div>
+</section>
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+  <form class="grid flex-1 gap-3 md:grid-cols-[1fr_220px_auto]">
+    <input class="input" name="q" placeholder="Search patients" value="{{ request.args.get('q','') }}">
+    <select class="input" name="risk"><option value="">All risks</option><option>Low Risk</option><option>Medium Risk</option><option>High Risk</option></select>
+    <button class="btn-primary">Search</button>
+  </form>
+  <a class="btn-primary" href="{{ url_for('labtech.new_patient') }}">Add Patient</a>
+</div>
+{% include "shared/patient_table.html" %}
+{% endblock %}

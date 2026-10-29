@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% set page_title = "Activity Logs" %}
+{% block content %}
+<div class="glass-card rounded-2xl p-6">
+  <div class="space-y-3">
+    {% for log in logs %}
+    <div class="rounded-2xl bg-white p-4 shadow">
+      <strong>{{ log.action }}</strong>
+      <p class="text-sm text-slate-500">{{ log.details }} · {{ log.user.email if log.user else "System" }} · {{ log.created_at.strftime("%d %b %Y %H:%M") }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block public_content %}
+<main class="flex min-h-screen items-center justify-center px-4">
+  <form method="post" class="glass-card w-full max-w-md rounded-2xl p-8">
+    {{ form.hidden_tag() }}
+    <h1 class="mb-2 text-3xl font-black">Welcome back</h1>
+    <p class="mb-6 text-slate-500">Sign in to continue patient care.</p>
+    <label class="mb-4 block text-sm font-bold">
+      Email or Patient ID {{ form.email(class="input mt-2", placeholder="admin@careai.com or PAT-1001") }}
+      {% for error in form.email.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+    </label>
+    <label class="mb-4 block text-sm font-bold">
+      Password {{ form.password(class="input mt-2") }}
+      {% for error in form.password.errors %}<span class="mt-1 block text-xs text-rose-600">{{ error }}</span>{% endfor %}
+    </label>
+    <label class="mb-6 flex items-center gap-2 text-sm">{{ form.remember() }} Remember me</label>
+    {{ form.submit(class="btn-primary w-full") }}
+    <p class="mt-4 text-center text-sm"><a class="font-bold text-purple-700" href="{{ url_for('auth.forgot_password') }}">Forgot password?</a></p>
+    <p class="mt-5 text-center text-sm">Need an account? <a class="font-bold text-purple-700" href="{{ url_for('auth.register') }}">Register</a></p>
+  </form>
+</main>
+{% endblock %}

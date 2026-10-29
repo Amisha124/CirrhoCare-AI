@@ -1,0 +1,30 @@
+<aside class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full border-r border-purple-100 bg-white/85 p-5 shadow-xl backdrop-blur-xl transition md:static md:translate-x-0" :class="{ 'translate-x-0': sidebarOpen }">
+  <div class="mb-8 flex items-center justify-between">
+    <a href="{{ url_for('main.landing') }}" class="text-xl font-black text-purple-700">CirrhosisCare AI</a>
+    <button class="md:hidden" @click="sidebarOpen=false">Close</button>
+  </div>
+  <nav class="space-y-2 text-sm font-semibold">
+    {% if current_user.role == "admin" %}
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.users') }}">Users</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.patients') }}">Patients</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.analytics') }}">Analytics</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.logs') }}">Activity Logs</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('admin.notifications') }}">Notifications</a>
+    {% elif current_user.role == "hepatologist" %}
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('hepatologist.dashboard') }}">Dashboard</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('labtech.reports') }}">Reports</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('main.notifications') }}">Notifications</a>
+    {% elif current_user.role == "patient" %}
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('patient.dashboard') }}">My Reports</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('main.notifications') }}">Notifications</a>
+    {% else %}
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('labtech.dashboard') }}">Dashboard</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('labtech.new_patient') }}">Add Patient</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('labtech.reports') }}">Reports</a>
+      <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('main.notifications') }}">Notifications</a>
+    {% endif %}
+    <a class="block rounded-2xl px-4 py-3 hover:bg-lavender-100" href="{{ url_for('main.profile') }}">Profile</a>
+    <a class="block rounded-2xl px-4 py-3 text-rose-600 hover:bg-rose-50" href="{{ url_for('auth.logout') }}">Logout</a>
+  </nav>
+</aside>
