@@ -222,9 +222,34 @@ class ApiClient {
       }),
 
     update: (id: number, data: Partial<Patient>) =>
-      this.request<{ success: boolean; patient: Patient; prediction: any; message: string }>(`/patients/${id}`, {
+      this.request<{
+        success: boolean;
+        patient: Patient;
+        prediction: any;
+        report?: MedicalReport;
+        generated_report?: MedicalReport;
+        report_error?: string;
+        message: string;
+      }>(`/patients/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
+      }),
+
+    getReports: (patientId: number) =>
+      this.request<{
+        success: boolean;
+        reports: MedicalReport[];
+        total: number;
+      }>(`/patients/${patientId}/reports`),
+
+    generateReport: (patientId: number) =>
+      this.request<{
+        success: boolean;
+        report: MedicalReport;
+        patient: Patient;
+        message: string;
+      }>(`/patients/${patientId}/generate-report`, {
+        method: 'POST',
       }),
 
     delete: (id: number) =>
@@ -622,6 +647,16 @@ class ApiClient {
     },
 
     getDownloadUrl: (reportId: number) => `/api/reports/${reportId}/download`,
+
+    generate: (patientId: number) =>
+      this.request<{
+        success: boolean;
+        report: MedicalReport;
+        patient: Patient;
+        message: string;
+      }>(`/patients/${patientId}/generate-report`, {
+        method: 'POST',
+      }),
 
     markReviewed: (reportId: number) => {
       return this.request<{

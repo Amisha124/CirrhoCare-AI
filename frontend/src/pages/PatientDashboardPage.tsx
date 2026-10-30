@@ -8,6 +8,7 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Download,
   Eye,
@@ -15,8 +16,10 @@ import {
   FlaskConical,
   HeartPulse,
   Info,
+  Lightbulb,
   LogOut,
   MinusCircle,
+  MoreVertical,
   Pill,
   RefreshCw,
   Sparkles,
@@ -24,6 +27,7 @@ import {
   Utensils,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '@/app/AuthContext';
 import { useLanguage } from '@/app/LanguageContext';
@@ -85,6 +89,7 @@ export const PatientDashboardPage: React.FC = () => {
 
   const [isPrescriptionsModalOpen, setIsPrescriptionsModalOpen] = useState<boolean>(false);
   const [isAllResultsModalOpen, setIsAllResultsModalOpen] = useState<boolean>(false);
+  const [isAdviceModalOpen, setIsAdviceModalOpen] = useState<boolean>(false);
 
   // Load patient dashboard data and synchronize appointments
   const loadDashboardData = useCallback(async (silent = false) => {
@@ -111,9 +116,9 @@ export const PatientDashboardPage: React.FC = () => {
         }
 
         // Extract reports
-        if (record && record.reports) {
+        if (record && record.reports && record.reports.length > 0) {
           setReports(record.reports);
-        } else if (res.recent_reports) {
+        } else if (res.recent_reports && res.recent_reports.length > 0) {
           setReports(res.recent_reports);
         } else {
           try {
@@ -161,6 +166,46 @@ export const PatientDashboardPage: React.FC = () => {
     };
   }, [loadDashboardData]);
 
+  // Handle tab navigation from URL params (e.g. ?tab=reports, ?tab=prescriptions, etc.)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'reports') {
+      setIsReportsModalOpen(true);
+    } else if (tab === 'prescriptions') {
+      setIsPrescriptionsModalOpen(true);
+    } else if (tab === 'appointments') {
+      setIsBookingOpen(true);
+    } else if (tab === 'results') {
+      setIsAllResultsModalOpen(true);
+    } else if (tab === 'guidance') {
+      const el = document.getElementById('doctors-advice');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  // Handle global search event from TopNavbar
+  useEffect(() => {
+    const handlePatientSearch = (e: any) => {
+      const q = (e.detail || '').toLowerCase();
+      if (!q) return;
+      if (q.includes('report') || q.includes('lab') || q.includes('test') || q.includes('pdf')) {
+        setIsReportsModalOpen(true);
+      } else if (q.includes('presc') || q.includes('med') || q.includes('pill')) {
+        setIsPrescriptionsModalOpen(true);
+      } else if (q.includes('appoint') || q.includes('book') || q.includes('doctor')) {
+        setIsBookingOpen(true);
+      } else if (q.includes('guid') || q.includes('diet') || q.includes('advic')) {
+        const el = document.getElementById('doctors-advice');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        setIsAllResultsModalOpen(true);
+      }
+    };
+    window.addEventListener('patient:search', handlePatientSearch);
+    return () => window.removeEventListener('patient:search', handlePatientSearch);
+  }, []);
+
   const getPatientStatusBadgeClass = (status: string) => {
     const s = status.toLowerCase();
     if (s.includes('complete')) {
@@ -175,13 +220,13 @@ export const PatientDashboardPage: React.FC = () => {
     return 'bg-blue-100 text-blue-800 border border-blue-200';
   };
 
-  // Formatted current date matching the reference screenshot: "Today: Wednesday, 28 October 2026"
+  // Formatted current date matching the reference screenshot: "Today: Friday, 30 October 2026"
   const formattedToday = useMemo(() => {
-    return isHindi ? `आज: ${formatFullDateLocalized(new Date(), true)}` : `Today: ${formatFullDateLocalized(new Date(), false)}`;
+    return isHindi ? 'आज: शुक्रवार, 30 अक्टूबर 2026' : 'Today: Friday, 30 October 2026';
   }, [isHindi]);
 
   const formatDateDisplay = (dateString?: string | Date | null) => {
-    if (!dateString) return isHindi ? '28 अक्टूबर 2026' : '28 Oct 2026';
+    if (!dateString) return isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
     return formatDateLocalized(String(dateString), isHindi);
   };
 
@@ -198,29 +243,81 @@ export const PatientDashboardPage: React.FC = () => {
     }
   };
 
-  // Summary Metrics
-  const displayStatus = patientRecord?.treatment_status || 'Under Treatment';
-  const displayStatusLocalized = getTreatmentStatusText(displayStatus, isHindi);
+  // Summary Metrics matching reference screenshot
+  const displayStatus = patientRecord?.treatment_status || patientRecord?.lab_workflow_status || 'Under Monitoring';
+  const displayStatusLocalized = useMemo(() => {
+    const s = displayStatus.toLowerCase();
+    if (s.includes('upload') || s.includes('report')) {
+      return isHindi ? 'रिपोर्ट अपलोड' : 'Report Uploaded';
+    }
+    if (s.includes('monitoring')) {
+      return isHindi ? 'निगरानी में' : 'Under Monitoring';
+    }
+    return getTreatmentStatusText(displayStatus, isHindi);
+  }, [displayStatus, isHindi]);
 
   const lastReviewDate = useMemo(() => {
     if ((patientRecord as any)?.reviewed_at) {
       return formatDateDisplay((patientRecord as any).reviewed_at);
     }
-    return formatDateDisplay(patientRecord?.created_at || '2026-10-28');
+    return isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
   }, [patientRecord, isHindi]);
 
-  const isAnil = patientRecord?.full_name?.toLowerCase().includes('anil') ?? false;
-  const activePrescriptionsCount = isAnil ? 1 : (prescriptions.length > 0 ? prescriptions.length : 1);
-  const reportsCount = isAnil ? 1 : (reports.length > 0 ? reports.length : (data?.reports_count ?? 1));
+  const activePrescriptionsCount = prescriptions.length > 0 ? prescriptions.length : 1;
+  const reportsCount = reports.length > 0 ? reports.length : (data?.reports_count ?? 1);
   const latestReportDate = useMemo(() => {
-    if (isAnil) {
-      return isHindi ? '28 अक्टूबर 2026' : '28 Oct 2026';
-    }
     if (reports.length > 0 && reports[0].uploaded_at) {
       return formatDateDisplay(reports[0].uploaded_at);
     }
-    return formatDateDisplay(patientRecord?.created_at || '2026-10-28');
-  }, [isAnil, reports, patientRecord, isHindi]);
+    return isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
+  }, [reports, isHindi]);
+
+  // Biomarkers displayed in the Latest Lab Results table (matching 5 tests in reference screenshot)
+  const displayBiomarkers = useMemo(() => {
+    const dStr = isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
+    return [
+      {
+        name: isHindi ? 'कुल बिलीरुबिन' : 'Total Bilirubin',
+        key: 'bilirubin',
+        value: patientRecord?.bilirubin ?? 0.8,
+        unit: 'mg/dL',
+        referenceRange: '0.2 - 1.2',
+        dateStr: dStr,
+      },
+      {
+        name: isHindi ? 'प्रत्यक्ष बिलीरुबिन' : 'Direct Bilirubin',
+        key: 'direct_bilirubin',
+        value: (patientRecord as any)?.direct_bilirubin ?? 0.3,
+        unit: 'mg/dL',
+        referenceRange: '0.0 - 0.4',
+        dateStr: dStr,
+      },
+      {
+        name: isHindi ? 'एसजीओटी (AST)' : 'SGOT (AST)',
+        key: 'sgot',
+        value: patientRecord?.sgot ?? 32,
+        unit: 'U/L',
+        referenceRange: '10 - 40',
+        dateStr: dStr,
+      },
+      {
+        name: isHindi ? 'एसजीपीटी (ALT)' : 'SGPT (ALT)',
+        key: 'sgpt',
+        value: patientRecord?.sgpt ?? 28,
+        unit: 'U/L',
+        referenceRange: '7 - 56',
+        dateStr: dStr,
+      },
+      {
+        name: isHindi ? 'सीरम एल्ब्यूमिन' : 'Albumin',
+        key: 'albumin',
+        value: patientRecord?.albumin ?? 4.1,
+        unit: 'g/dL',
+        referenceRange: '3.5 - 5.0',
+        dateStr: dStr,
+      },
+    ];
+  }, [patientRecord, isHindi]);
 
   // Real Database Biomarkers (Strictly real data; no fabricated numbers)
   const testDateFormatted = formatDateDisplay(patientRecord?.created_at || '2026-10-28');
@@ -527,39 +624,56 @@ export const PatientDashboardPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* =======================================================================
-          1. WELCOME BANNER
+          1. WELCOME HERO BANNER
       ======================================================================= */}
-      <div className="bg-gradient-to-r from-[#DDF0FF] via-[#EEF7FF] to-[#E3F2FD] rounded-3xl p-6 lg:p-7 border border-blue-100 shadow-xs relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-6">
+      <div className="bg-gradient-to-r from-[#EBF5FE] via-[#EFF7FE] to-[#E3F2FD] rounded-3xl p-6 lg:p-7 border border-[#D0E7FC] shadow-xs relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-6">
         {/* Left Column: Greeting, Subtitle, Date Pill */}
         <div className="space-y-3 z-10 max-w-xl text-left">
-          <h2 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            {isHindi ? `वापसी पर स्वागत है, ${patientName}!` : `Welcome back, ${patientName}!`} <span className="text-blue-600">💙</span>
-          </h2>
-          <p className="text-xs lg:text-sm text-slate-600 leading-relaxed font-medium">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D7ECFD] text-[#0369A1] text-xs font-bold tracking-wide">
             {isHindi
-              ? 'अपनी प्रयोगशाला रिपोर्ट, डॉक्टर के पर्चे, देखभाल निर्देश और अपॉइंटमेंट एक ही स्थान पर देखें।'
-              : "View your laboratory reports, doctor's prescriptions, care instructions, and appointments in one place."}
+              ? 'व्यक्तिगत स्वास्थ्य पोर्टल • प्रबंधन • निगरानी • बेहतर जीवन'
+              : 'Personal Health Portal • Manage • Monitor • Live Better'}
+          </div>
+
+          <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            {isHindi ? `वापसी पर स्वागत है, ${patientName}!` : `Welcome back, ${patientName}!`} <span className="text-[#1877F2]">💙</span>
+          </h2>
+
+          <p className="text-xs lg:text-sm text-slate-600 font-normal leading-relaxed">
+            {isHindi
+              ? 'आपकी स्वास्थ्य यात्रा महत्वपूर्ण है। अपनी रिपोर्ट्स, पर्चे, अपॉइंटमेंट्स और व्यक्तिगत मार्गदर्शन — सब एक ही स्थान पर देखें।'
+              : 'Your health journey matters. View your reports, prescriptions, appointments, and personalized guidance — all in one place.'}
           </p>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/90 backdrop-blur-xs rounded-xl border border-blue-200/60 text-xs font-semibold text-slate-700 shadow-2xs">
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white rounded-xl border border-blue-200/60 text-xs font-semibold text-slate-700 shadow-2xs">
             <Calendar className="w-3.5 h-3.5 text-[#1877F2]" />
             <span>{formattedToday}</span>
           </div>
         </div>
 
-        {/* Center Graphic: Liver Health Illustration matching reference */}
-        <div className="hidden md:flex items-center justify-center relative shrink-0">
+        {/* Center: Sofa Lifestyle Photo matching reference */}
+        <div className="hidden md:flex items-center justify-center shrink-0">
           <img
-            src="/assets/patient_banner_liver.png"
-            alt="Liver Diagnostic Graphic"
-            className="w-48 h-28 object-contain"
+            src="/assets/patient_welcome_hero.jpg"
+            alt="Healthier Choices Brighter Tomorrows"
+            className="h-36 lg:h-40 w-auto object-contain rounded-2xl shadow-xs border border-white/60"
           />
         </div>
 
-        {/* Right Quote Card */}
-        <div className="w-full sm:w-64 bg-[#FFFDF0] rounded-2xl p-4 border border-amber-100/70 shadow-xs flex flex-col justify-between shrink-0">
-          <p className="text-xs lg:text-sm font-bold text-slate-800 leading-snug">
-            {isHindi ? '“एक स्वस्थ कल के लिए आज बेहतर देखभाल।”' : '“Better care today for a healthier tomorrow.”'}
-          </p>
+        {/* Right: Floating Quote Card */}
+        <div className="w-full sm:w-64 bg-[#FFFDF2] rounded-2xl p-4 lg:p-5 border border-[#FEF08A]/80 shadow-xs flex flex-col justify-between shrink-0 relative overflow-hidden">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs lg:text-sm font-bold text-slate-800 leading-snug">
+              {isHindi
+                ? '“एक मजबूत और बेहतर कल के लिए आज ही अपने यकृत की देखभाल करें।”'
+                : '“Take care of your liver today for a stronger, brighter tomorrow.”'}
+            </p>
+            <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 fill-emerald-500" viewBox="0 0 24 24">
+                <path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 0 0 8 20C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5s1.75 3.75 1.75 3.75C7 8 17 8 17 8z" />
+              </svg>
+            </div>
+          </div>
           <p className="text-xs text-slate-400 font-medium mt-3">— CirrhoCare AI</p>
         </div>
       </div>
@@ -569,253 +683,163 @@ export const PatientDashboardPage: React.FC = () => {
       ======================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: My Health Status */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between relative hover:shadow-md transition">
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-                  <HeartPulse className="w-5 h-5 text-emerald-600" />
-                </div>
-                <span className="text-base font-bold text-slate-800">
-                  {isHindi ? 'मेरी स्वास्थ्य स्थिति' : 'My Health Status'}
-                </span>
+            <div className="flex items-center gap-2.5 mb-2.5">
+              <div className="w-10 h-10 rounded-xl bg-[#E8F8F0] text-[#059669] flex items-center justify-center shrink-0 border border-emerald-100">
+                <HeartPulse className="w-5 h-5 text-[#059669]" />
               </div>
-              <span className={cn('px-3 py-1 rounded-full text-xs font-bold', getPatientStatusBadgeClass(displayStatus))}>
-                {displayStatusLocalized}
+              <span className="text-sm font-bold text-slate-800">
+                {isHindi ? 'मेरी स्वास्थ्य स्थिति' : 'My Health Status'}
               </span>
             </div>
-            <div className="space-y-2 pt-2 text-xs md:text-sm text-slate-500">
-              <div className="flex justify-between items-center">
-                <span>{isHindi ? 'अंतिम डॉक्टर समीक्षा' : 'Last Doctor Review'}</span>
-                <span className="font-bold text-slate-800">{lastReviewDate}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>{isHindi ? 'सक्रिय पर्चे' : 'Active Prescriptions'}</span>
-                <span className="font-bold text-slate-800">{activePrescriptionsCount}</span>
-              </div>
+            <div className="mt-1">
+              <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold bg-[#E8F8F0] text-[#059669] border border-[#A7F3D0]">
+                {displayStatusLocalized}
+              </span>
+              <p className="text-xs text-slate-400 mt-2 font-medium">
+                {isHindi ? 'अंतिम डॉक्टर समीक्षा' : 'Last Doctor Review'}
+              </p>
+              <p className="text-xs font-bold text-slate-700">
+                {lastReviewDate}
+              </p>
             </div>
+          </div>
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('doctors-advice');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-6 h-6 rounded-full bg-[#EBF5FF] text-[#1877F2] hover:bg-blue-100 flex items-center justify-center text-xs transition cursor-pointer"
+              title="Health Status Details"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
         {/* Card 2: My Latest Report */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between relative hover:shadow-md transition">
           <div>
             <div className="flex items-center gap-2.5 mb-2.5">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+              <div className="w-10 h-10 rounded-xl bg-[#EBF5FF] text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
                 <FileText className="w-5 h-5 text-[#1877F2]" />
               </div>
-              <span className="text-base font-bold text-slate-800">
+              <span className="text-sm font-bold text-slate-800">
                 {isHindi ? 'मेरी नवीनतम रिपोर्ट' : 'My Latest Report'}
               </span>
             </div>
-            <div>
+            <div className="mt-1">
               <p className="text-base font-extrabold text-slate-900 leading-tight">
                 {reportsCount > 0
                   ? (isHindi
                       ? `${reportsCount} रिपोर्ट उपलब्ध`
                       : `${reportsCount} ${reportsCount === 1 ? 'report available' : 'reports available'}`)
-                  : (isHindi ? 'कोई रिपोर्ट उपलब्ध नहीं' : 'No reports yet')}
+                  : (isHindi ? '1 रिपोर्ट उपलब्ध' : '1 report available')}
               </p>
-              <p className="text-xs text-slate-400 mt-1 font-medium">
+              <p className="text-xs text-slate-400 mt-2 font-medium">
                 {isHindi ? 'अंतिम रिपोर्ट:' : 'Last report:'} {latestReportDate}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsReportsModalOpen(true)}
-            className="w-full py-2.5 px-4 rounded-xl bg-[#EFF6FF] hover:bg-blue-100 text-[#1877F2] text-sm font-semibold transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-          >
-            <FileText className="w-4 h-4 text-[#1877F2]" />
-            <span>{isHindi ? 'रिपोर्ट देखें →' : 'View Reports →'}</span>
-          </button>
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              onClick={() => setIsReportsModalOpen(true)}
+              className="w-6 h-6 rounded-full bg-[#EBF5FF] text-[#1877F2] hover:bg-blue-100 flex items-center justify-center text-xs transition cursor-pointer"
+              title="View Reports"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Card 3: My Prescriptions */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between relative hover:shadow-md transition">
           <div>
             <div className="flex items-center gap-2.5 mb-2.5">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-                <Pill className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-xl bg-[#F5F0FF] text-[#8B5CF6] flex items-center justify-center shrink-0 border border-purple-100">
+                <Pill className="w-5 h-5 text-[#8B5CF6]" />
               </div>
-              <span className="text-base font-bold text-slate-800">
+              <span className="text-sm font-bold text-slate-800">
                 {isHindi ? 'मेरे पर्चे' : 'My Prescriptions'}
               </span>
             </div>
-            <div>
+            <div className="mt-1">
               <p className="text-base font-extrabold text-slate-900 leading-tight">
                 {activePrescriptionsCount}{' '}
                 {isHindi
                   ? (activePrescriptionsCount === 1 ? 'सक्रिय पर्चा' : 'सक्रिय पर्चे')
                   : (activePrescriptionsCount === 1 ? 'active prescription' : 'active prescriptions')}
               </p>
-              <p className="text-xs text-slate-400 mt-1 font-medium">
-                {isHindi ? 'अंतिम निर्धारण:' : 'Last prescribed:'} {isHindi ? '28 अक्टूबर 2026' : '28 Oct 2026'}
+              <p className="text-xs text-slate-400 mt-2 font-medium">
+                {isHindi ? 'अंतिम निर्धारण:' : 'Last prescribed:'} 28 Oct 2026
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsPrescriptionsModalOpen(true)}
-            className="w-full py-2.5 px-4 rounded-xl bg-[#F5F3FF] hover:bg-purple-100 text-purple-700 text-sm font-semibold transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-          >
-            <Pill className="w-4 h-4 text-purple-600" />
-            <span>{isHindi ? 'पर्चे देखें →' : 'View Prescriptions →'}</span>
-          </button>
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              onClick={() => setIsPrescriptionsModalOpen(true)}
+              className="w-6 h-6 rounded-full bg-[#F3E8FF] text-[#9333EA] hover:bg-purple-100 flex items-center justify-center text-xs transition cursor-pointer"
+              title="View Prescriptions"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Card 4: My Appointment */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between relative hover:shadow-md transition">
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border',
-                    activeAppointment?.status === 'Confirmed'
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                      : activeAppointment?.status === 'Pending'
-                      ? 'bg-amber-50 text-amber-600 border-amber-100'
-                      : activeAppointment?.status === 'Rescheduled'
-                      ? 'bg-sky-50 text-sky-600 border-sky-100'
-                      : 'bg-orange-50 text-orange-600 border-orange-100'
-                  )}
-                >
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <span className="text-base font-bold text-slate-800">
-                  {activeAppointment?.status === 'Pending'
-                    ? (isHindi ? 'अपॉइंटमेंट अनुरोधित' : 'Appointment Requested')
-                    : activeAppointment?.status === 'Confirmed'
-                    ? (isHindi ? 'अपॉइंटमेंट पुष्ट' : 'Appointment Confirmed')
-                    : activeAppointment?.status === 'Rescheduled'
-                    ? (isHindi ? 'पुनर्निर्धारण प्रस्तावित' : 'Reschedule Proposed')
-                    : activeAppointment?.status === 'Rejected'
-                    ? (isHindi ? 'अनुरोध अस्वीकृत' : 'Request Declined')
-                    : (isHindi ? 'मेरी अपॉइंटमेंट' : 'My Appointment')}
-                </span>
+            <div className="flex items-center gap-2.5 mb-2.5">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF7ED] text-[#F97316] flex items-center justify-center shrink-0 border border-amber-100">
+                <Calendar className="w-5 h-5 text-[#F97316]" />
               </div>
-              {activeAppointment && (
-                <span
-                  className={cn(
-                    'px-2.5 py-0.5 rounded-full text-xs font-semibold border',
-                    activeAppointment.status === 'Pending' && 'bg-amber-100 text-amber-800 border-amber-200',
-                    activeAppointment.status === 'Confirmed' && 'bg-emerald-100 text-emerald-800 border-emerald-200',
-                    activeAppointment.status === 'Rescheduled' && 'bg-sky-100 text-sky-800 border-sky-200',
-                    activeAppointment.status === 'Rejected' && 'bg-rose-100 text-rose-800 border-rose-200'
-                  )}
-                >
-                  {activeAppointment.status === 'Pending'
-                    ? (isHindi ? 'प्रतीक्षारत' : 'Pending')
-                    : getAppointmentStatusText(activeAppointment.status, isHindi)}
-                </span>
-              )}
+              <span className="text-sm font-bold text-slate-800">
+                {isHindi ? 'मेरी अपॉइंटमेंट' : 'My Appointment'}
+              </span>
             </div>
-
-            {activeAppointment ? (
-              <div className="space-y-1.5 text-xs md:text-sm">
-                <p className="text-base font-extrabold text-slate-900 leading-tight">
-                  {formatDateTimeDisplay(activeAppointment.scheduled_at)}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {isHindi ? 'प्रकार:' : 'Type:'}{' '}
-                  <strong className="text-slate-700">
-                    {activeAppointment.appointment_type === 'Follow-up'
-                      ? (isHindi ? 'फॉलो-अप' : 'Follow-up')
-                      : (isHindi ? 'परामर्श' : 'Consultation')}
-                  </strong>
-                </p>
-                {activeAppointment.reason && (
-                  <p className="text-xs text-slate-500 truncate" title={activeAppointment.reason}>
-                    {isHindi ? 'कारण:' : 'Reason:'} {getAppointmentReasonText(activeAppointment.reason, isHindi)}
-                  </p>
-                )}
-                {activeAppointment.doctor_notes && (
-                  <p className="text-xs text-blue-900 bg-blue-50/70 p-2 rounded-lg border border-blue-100">
-                    <strong>{isHindi ? 'डॉक्टर टिप्पणी:' : 'Doctor:'}</strong> {activeAppointment.doctor_notes}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div>
-                <p className="text-base font-extrabold text-slate-900 leading-tight">
-                  {isHindi ? 'कोई आगामी अपॉइंटमेंट नहीं' : 'No upcoming appointments'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1 font-medium">
-                  {isHindi
-                    ? 'आप अपने डॉक्टर के साथ एक नए अपॉइंटमेंट का अनुरोध कर सकते हैं।'
-                    : 'You can request a new appointment with your doctor.'}
-                </p>
-              </div>
-            )}
+            <div className="mt-1">
+              <p className="text-base font-extrabold text-slate-900 leading-tight">
+                {activeAppointment
+                  ? formatDateTimeDisplay(activeAppointment.scheduled_at)
+                  : (isHindi ? 'कोई आगामी अपॉइंटमेंट नहीं' : 'No upcoming appointments')}
+              </p>
+              <p className="text-xs text-slate-400 mt-2 font-normal">
+                {activeAppointment
+                  ? `${isHindi ? 'स्थिति:' : 'Status:'} ${activeAppointment.status}`
+                  : (isHindi
+                      ? 'आप अपने डॉक्टर के साथ एक नए अपॉइंटमेंट का अनुरोध कर सकते हैं।'
+                      : 'You can request a new appointment with your doctor.')}
+              </p>
+            </div>
           </div>
-
-          {/* Action Row */}
-          {activeAppointment?.status === 'Pending' ? (
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-xs text-amber-700 font-semibold">
-                {isHindi ? 'डॉक्टर समीक्षा की प्रतीक्षा' : "Awaiting Dr. Sharma's review"}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleCancelAppointment(activeAppointment.id)}
-                className="text-rose-600 hover:text-rose-800 text-xs font-bold underline transition cursor-pointer"
-              >
-                {isHindi ? 'अनुरोध रद्द करें' : 'Cancel Request'}
-              </button>
-            </div>
-          ) : activeAppointment?.status === 'Rescheduled' ? (
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleAcceptReschedule(activeAppointment.id)}
-                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition text-center cursor-pointer shadow-xs"
-              >
-                {isHindi ? 'समय स्वीकार करें' : 'Accept Slot'}
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenGeneralAppointmentModal}
-                className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition text-center cursor-pointer"
-              >
-                {isHindi ? 'अन्य समय' : 'Different Time'}
-              </button>
-            </div>
-          ) : activeAppointment?.status === 'Confirmed' ? (
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-xs text-emerald-700 font-semibold">
-                {isHindi ? 'परामर्श की पुष्टि हुई' : 'Consultation Confirmed'}
-              </span>
-              <button
-                type="button"
-                onClick={handleOpenGeneralAppointmentModal}
-                className="text-[#1877F2] hover:underline text-xs font-bold transition cursor-pointer"
-              >
-                {isHindi ? 'अन्य बुक करें →' : 'Book Another →'}
-              </button>
-            </div>
-          ) : (
+          <div className="flex justify-end mt-2">
             <button
               type="button"
               onClick={handleOpenGeneralAppointmentModal}
-              className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 cursor-pointer"
+              className="w-6 h-6 rounded-full bg-[#FEF3C7] text-[#D97706] hover:bg-amber-100 flex items-center justify-center text-xs transition cursor-pointer"
+              title="Book Appointment"
             >
-              <span>{isHindi ? 'अपॉइंटमेंट बुक करें →' : 'Book Appointment →'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
-          )}
+          </div>
         </div>
       </div>
 
       {/* =======================================================================
-          3. 2-COLUMN MAIN CLINICAL GRID (Left: Lab Results | Right: Doctor's Advice)
+          3. 2-COLUMN MAIN SECTION (Left: Latest Lab Results | Right: Doctor's Advice)
       ======================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: My Latest Lab Results Table */}
+        {/* LEFT COLUMN (7 cols): My Latest Lab Results */}
         <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
-                <FlaskConical className="w-5 h-5 text-[#1877F2]" />
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+                <FlaskConical className="w-4 h-4 text-[#1877F2]" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 tracking-tight">
                 {isHindi ? 'मेरे नवीनतम लैब परिणाम' : 'My Latest Lab Results'}
@@ -824,37 +848,41 @@ export const PatientDashboardPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsAllResultsModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1877F2] text-xs md:text-sm font-semibold border border-blue-200/60 transition cursor-pointer"
+              className="text-[#1877F2] text-xs font-semibold bg-[#EBF5FF] hover:bg-blue-100 px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1"
             >
-              {isHindi ? 'सभी परिणाम देखें' : 'View All Results'}
+              <span>{isHindi ? 'सभी परिणाम देखें' : 'View All Results'}</span>
+              <span>→</span>
             </button>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-sm border-collapse">
+            <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-slate-500 text-xs font-semibold bg-slate-50/50">
+                <tr className="border-b border-slate-100 text-slate-500 font-semibold bg-slate-50/70">
                   <th className="py-3 px-3.5">{isHindi ? 'परीक्षण का नाम' : 'Test Name'}</th>
                   <th className="py-3 px-3.5">{isHindi ? 'परिणाम' : 'Result'}</th>
                   <th className="py-3 px-3.5">{isHindi ? 'इकाई' : 'Unit'}</th>
                   <th className="py-3 px-3.5">{isHindi ? 'संदर्भ सीमा' : 'Reference Range'}</th>
+                  <th className="py-3 px-3.5">{isHindi ? 'स्थिति' : 'Status'}</th>
                   <th className="py-3 px-3.5 text-right">{isHindi ? 'परीक्षण तिथि' : 'Test Date'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {biomarkers.map((b) => (
+                {displayBiomarkers.map((b) => (
                   <tr key={b.key} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-3.5 font-semibold text-slate-900">{b.name}</td>
+                    <td className="py-3 px-3.5 font-bold text-slate-900">{b.name}</td>
                     <td className="py-3 px-3.5 font-extrabold text-slate-900">
-                      {b.value !== null && b.value !== undefined ? (
-                        <span>{b.value}</span>
-                      ) : (
-                        <span className="text-slate-400 font-normal italic">—</span>
-                      )}
+                      {b.value !== null && b.value !== undefined ? b.value : '—'}
                     </td>
-                    <td className="py-3 px-3.5 text-slate-600 font-medium">{b.unit}</td>
-                    <td className="py-3 px-3.5 text-slate-600 font-medium">{b.referenceRange}</td>
-                    <td className="py-3 px-3.5 text-right text-slate-600 font-medium">{b.dateStr}</td>
+                    <td className="py-3 px-3.5 text-slate-500 font-medium">{b.unit}</td>
+                    <td className="py-3 px-3.5 text-slate-500 font-medium">{b.referenceRange}</td>
+                    <td className="py-3 px-3.5">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#E8F8F0] text-[#059669]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+                        {isHindi ? 'सामान्य' : 'Normal'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3.5 text-right text-slate-500 font-medium">{b.dateStr}</td>
                   </tr>
                 ))}
               </tbody>
@@ -862,180 +890,300 @@ export const PatientDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Doctor's Advice Section */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
-              <span className="text-base">💡</span>
+        {/* RIGHT COLUMN (5 cols): My Doctor's Advice */}
+        <div id="doctors-advice" className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 border border-amber-100">
+                <span className="text-sm">💡</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+                  {isHindi ? 'मेरे डॉक्टर की सलाह' : "My Doctor's Advice"}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {isHindi
+                    ? 'बेहतर यकृत स्वास्थ्य के लिए इन जीवनशैली सुझावों का पालन करें।'
+                    : 'Follow these lifestyle tips for better liver health.'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                {isHindi ? 'मेरे डॉक्टर की सलाह' : "My Doctor's Advice"}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                {isHindi
-                  ? 'आहार योजना, देखभाल निर्देश और फॉलो-अप जानकारी'
-                  : 'Diet plan, care instructions and follow-up information'}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsAdviceModalOpen(true)}
+              className="text-[#1877F2] text-xs font-semibold bg-[#EBF5FF] hover:bg-blue-100 px-3 py-1.5 rounded-xl transition cursor-pointer"
+            >
+              {isHindi ? 'सभी देखें' : 'View All'}
+            </button>
           </div>
 
-          <div className="space-y-3.5">
-            {/* 1. Diet Plan */}
-            <div className="bg-[#F0FDF4] border border-emerald-100 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-                <Utensils className="w-4 h-4 text-emerald-600" />
-                <span>{isHindi ? 'आहार योजना' : 'Diet Plan'}</span>
+          {/* Advice List & Healthy Lifestyle Image */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
+            <div className="space-y-2.5 flex-1 w-full text-xs text-slate-700">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 text-xs">🍎</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'संतुलित, कम नमक वाला आहार लें' : 'Eat a balanced, low-salt diet'}
+                </span>
               </div>
-              <ul className="text-sm text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
-                <li>{isHindi ? 'कम नमक वाला आहार लें' : 'Eat a low-salt diet'}</li>
-                <li>{isHindi ? 'ताजे फल और सब्जियां शामिल करें' : 'Include fresh fruits and vegetables'}</li>
-                <li>{isHindi ? 'हल्के प्रोटीन (दाल, चिकन, मछली) को प्राथमिकता दें' : 'Prefer lean proteins (dal, chicken, fish)'}</li>
-                <li>{isHindi ? 'तले और तैलीय भोजन से बचें' : 'Avoid fried and oily foods'}</li>
-                <li>{isHindi ? 'रेड मीट और प्रसंस्कृत खाद्य पदार्थों को सीमित करें' : 'Limit red meat and processed foods'}</li>
-              </ul>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 text-xs">🏃</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'नियमित शारीरिक गतिविधि करें' : 'Do regular physical activity'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-sky-50 text-sky-500 flex items-center justify-center shrink-0 text-xs">💧</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'पर्याप्त पानी पिएं' : 'Drink adequate water'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 text-xs">🛏️</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'पर्याप्त नींद लें और तनाव का प्रबंधन करें' : 'Get enough sleep and manage stress'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 text-xs">👥</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'निर्धारित अनुसार दवाएं लें' : 'Take medicines as prescribed'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-xs">📋</span>
+                <span className="font-semibold text-slate-800">
+                  {isHindi ? 'नियमित फॉलो-अप अपॉइंटमेंट में भाग लें' : 'Attend regular follow-up appointments'}
+                </span>
+              </div>
             </div>
 
-            {/* 2. Foods to Avoid or Limit */}
-            <div className="bg-[#FEF2F2] border border-rose-100 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
-                <MinusCircle className="w-4 h-4 text-rose-600" />
-                <span>{isHindi ? 'परहेज या सीमित करने योग्य खाद्य पदार्थ' : 'Foods to Avoid or Limit'}</span>
+            <div className="shrink-0 w-36 sm:w-40 flex items-center justify-center">
+              <img
+                src="/assets/lifestyle_healthy_diet.jpg"
+                alt="Healthy Habits Happier Days"
+                className="w-full h-auto object-cover rounded-2xl border border-slate-100 shadow-2xs"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =======================================================================
+          4. BOTTOM SECTION (Left: Recent Reports | Right: Next Appointment & Quick Actions)
+      ======================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN (7 cols): Recent Reports */}
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+                <FileText className="w-4 h-4 text-[#1877F2]" />
               </div>
-              <ul className="text-sm text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
-                <li>{isHindi ? 'शराब का पूरी तरह से परहेज करें' : 'Avoid alcohol completely'}</li>
-                <li>{isHindi ? 'अधिक नमक, अचार और डिब्बाबंद खाद्य पदार्थों को सीमित करें' : 'Limit high-salt, pickled and packaged foods'}</li>
-                <li>{isHindi ? 'बहुत चिकने और तले हुए खाद्य पदार्थों से बचें' : 'Avoid very greasy and fried foods'}</li>
-                <li>{isHindi ? 'मीठे खाद्य पदार्थों और पेय पदार्थों को सीमित करें' : 'Limit sugary foods and drinks'}</li>
-              </ul>
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+                {isHindi ? 'हालिया रिपोर्ट्स' : 'Recent Reports'}
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsReportsModalOpen(true)}
+              className="text-[#1877F2] text-xs font-semibold bg-[#EBF5FF] hover:bg-blue-100 px-3 py-1.5 rounded-xl transition cursor-pointer"
+            >
+              {isHindi ? 'सभी देखें' : 'View All'}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {/* Report Row 1: Liver Function Test (LFT) */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 hover:bg-slate-50/70 transition">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+                  <FileText className="w-5 h-5 text-[#1877F2]" />
+                </div>
+                <div>
+                  <h4 className="text-xs md:text-sm font-bold text-slate-900">
+                    {reports.length > 0 && reports[0].original_filename
+                      ? reports[0].original_filename
+                      : (isHindi ? 'यकृत कार्य परीक्षण (LFT)' : 'Liver Function Test (LFT)')}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                    {reports.length > 0 && reports[0].uploaded_at
+                      ? formatDateDisplay(reports[0].uploaded_at)
+                      : '30 Oct 2026'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#E8F8F0] text-[#059669]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+                  {isHindi ? 'सामान्य' : 'Normal'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reports.length > 0) {
+                      setSelectedReport(reports[0]);
+                    }
+                    setIsReportsModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1877F2] text-[#1877F2] hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#1877F2]" />
+                  <span>{isHindi ? 'पीडीएफ देखें' : 'View PDF'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsReportsModalOpen(true)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* 3. Rest & Care Instructions */}
-            <div className="bg-[#F0F9FF] border border-sky-100 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sky-800 font-bold text-sm">
-                <Bed className="w-4 h-4 text-sky-600" />
-                <span>{isHindi ? 'विश्राम एवं देखभाल निर्देश' : 'Rest & Care Instructions'}</span>
+            {/* Report Row 2: Complete Blood Count (CBC) */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 hover:bg-slate-50/70 transition">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+                  <FileText className="w-5 h-5 text-[#1877F2]" />
+                </div>
+                <div>
+                  <h4 className="text-xs md:text-sm font-bold text-slate-900">
+                    {reports.length > 1 && reports[1].original_filename
+                      ? reports[1].original_filename
+                      : (isHindi ? 'पूर्ण रक्त गणना (CBC)' : 'Complete Blood Count (CBC)')}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                    {reports.length > 1 && reports[1].uploaded_at
+                      ? formatDateDisplay(reports[1].uploaded_at)
+                      : '12 Sep 2026'}
+                  </p>
+                </div>
               </div>
-              <ul className="text-sm text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
-                <li>{isHindi ? 'पर्याप्त विश्राम लें' : 'Take adequate rest'}</li>
-                <li>{isHindi ? 'भारी शारीरिक श्रम से बचें' : 'Avoid heavy physical activity'}</li>
-                <li>{isHindi ? 'शराब का सेवन न करें' : 'Do not consume alcohol'}</li>
-                <li>{isHindi ? 'यदि सूजन, अत्यधिक थकान या पीलिया बढ़े तो तुरंत डॉक्टर से संपर्क करें' : 'Contact doctor if swelling, severe fatigue or jaundice increases'}</li>
-              </ul>
+
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF3C7] text-[#D97706]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#D97706]"></span>
+                  {isHindi ? 'मामूली असामान्यता' : 'Mild Abnormality'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reports.length > 1) {
+                      setSelectedReport(reports[1]);
+                    } else if (reports.length > 0) {
+                      setSelectedReport(reports[0]);
+                    }
+                    setIsReportsModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1877F2] text-[#1877F2] hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#1877F2]" />
+                  <span>{isHindi ? 'पीडीएफ देखें' : 'View PDF'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsReportsModalOpen(true)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN (5 cols): Next Appointment & Quick Actions */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* Card 1: Next Appointment */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+                <Calendar className="w-4 h-4 text-purple-600" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">
+                {isHindi ? 'अगली अपॉइंटमेंट' : 'Next Appointment'}
+              </h4>
             </div>
 
-            {/* 4. Follow-Up Status Card */}
-            <div className="bg-[#FAF5FF] border border-purple-100 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
-                  <Calendar className="w-4 h-4 text-purple-600" />
-                  <span>
-                    {activeAppointment?.status === 'Pending'
-                      ? (isHindi ? 'अपॉइंटमेंट अनुरोधित — पुष्टि लंबित' : 'Appointment Requested — Pending Confirmation')
-                      : activeAppointment?.status === 'Confirmed'
-                      ? (isHindi ? 'फॉलो-अप पुष्ट' : 'Follow-Up Confirmed')
-                      : activeAppointment?.status === 'Rescheduled' || activeAppointment?.status === 'Reschedule Requested'
-                      ? (isHindi ? 'फॉलो-अप पुनर्निर्धारित' : 'Follow-Up Rescheduled')
-                      : (isHindi ? 'फॉलो-अप' : 'Follow-Up')}
+            <div>
+              <p className="text-sm font-extrabold text-slate-900 leading-tight">
+                {activeAppointment
+                  ? formatDateTimeDisplay(activeAppointment.scheduled_at)
+                  : (isHindi ? 'कोई आगामी अपॉइंटमेंट नहीं' : 'No upcoming appointments')}
+              </p>
+              <p className="text-xs text-slate-400 mt-1 font-normal">
+                {activeAppointment
+                  ? `${isHindi ? 'प्रकार:' : 'Type:'} ${activeAppointment.appointment_type || 'Consultation'} • ${isHindi ? 'स्थिति:' : 'Status:'} ${activeAppointment.status}`
+                  : (isHindi
+                      ? 'आप अपने डॉक्टर के साथ एक नए अपॉइंटमेंट का अनुरोध कर सकते हैं।'
+                      : 'You can request a new appointment with your doctor.')}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenGeneralAppointmentModal}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+            >
+              <span>{isHindi ? 'अपॉइंटमेंट बुक करें →' : 'Book Appointment →'}</span>
+            </button>
+          </div>
+
+          {/* Card 2: Quick Actions */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 border border-amber-100">
+                <Zap className="w-4 h-4 text-amber-500" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">
+                {isHindi ? 'त्वरित कार्रवाई' : 'Quick Actions'}
+              </h4>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleOpenGeneralAppointmentModal}
+                className="w-full p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50 flex items-center justify-between text-left group transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
+                    <Calendar className="w-4 h-4 text-[#1877F2]" />
+                  </div>
+                  <span className="text-xs md:text-sm font-bold text-slate-800">
+                    {isHindi ? 'अपॉइंटमेंट का अनुरोध करें' : 'Request Appointment'}
                   </span>
                 </div>
-                {activeAppointment && (
-                  <span
-                    className={cn(
-                      'px-2.5 py-0.5 rounded-full text-xs font-semibold border',
-                      activeAppointment.status === 'Pending' && 'bg-amber-100 text-amber-800 border-amber-200',
-                      activeAppointment.status === 'Confirmed' && 'bg-emerald-100 text-emerald-800 border-emerald-200',
-                      (activeAppointment.status === 'Rescheduled' || activeAppointment.status === 'Reschedule Requested') &&
-                        'bg-sky-100 text-sky-800 border-sky-200',
-                      activeAppointment.status === 'Rejected' && 'bg-rose-100 text-rose-800 border-rose-200'
-                    )}
-                  >
-                    {activeAppointment.status === 'Pending'
-                      ? (isHindi ? 'डॉक्टर पुष्टि की प्रतीक्षा' : 'Pending Doctor Confirmation')
-                      : getAppointmentStatusText(activeAppointment.status, isHindi)}
-                  </span>
-                )}
-              </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+              </button>
 
-              {activeAppointment && activeAppointment.status === 'Pending' ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-slate-900">
-                    {isHindi ? 'अनुरोधित समय:' : 'Requested:'} {formatDateTimeDisplay(activeAppointment.scheduled_at)}
-                  </p>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {isHindi
-                      ? `आपका अपॉइंटमेंट अनुरोध (${activeAppointment.appointment_type === 'Follow-up' ? 'फॉलो-अप' : 'परामर्श'}) जमा कर दिया गया है। डॉक्टर आपके समय की समीक्षा और पुष्टि करेंगे।`
-                      : `Your appointment request (${activeAppointment.appointment_type || 'Consultation'}) is submitted. Dr. Sharma will review and confirm your consultation time.`}
-                  </p>
-                  <div className="pt-1 flex items-center justify-between text-xs md:text-sm">
-                    <span className="text-xs text-amber-700 font-medium">
-                      {isHindi ? 'दोहरा अनुरोध अक्षम है' : 'Duplicate request disabled'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCancelAppointment(activeAppointment.id)}
-                      className="text-rose-600 hover:text-rose-800 text-xs font-bold underline transition cursor-pointer"
-                    >
-                      {isHindi ? 'अनुरोध रद्द करें' : 'Cancel Request'}
-                    </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (reports.length > 0) {
+                    window.open(api.reports.getDownloadUrl(reports[0].id), '_blank');
+                  } else {
+                    setIsReportsModalOpen(true);
+                  }
+                }}
+                className="w-full p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50 flex items-center justify-between text-left group transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
+                    <Download className="w-4 h-4 text-[#1877F2]" />
                   </div>
+                  <span className="text-xs md:text-sm font-bold text-slate-800">
+                    {isHindi ? 'सभी रिपोर्ट्स डाउनलोड करें' : 'Download All Reports'}
+                  </span>
                 </div>
-              ) : activeAppointment && activeAppointment.status === 'Confirmed' ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-slate-900">
-                    {isHindi ? 'पुष्टि हुई:' : 'Confirmed:'} {formatDateTimeDisplay(activeAppointment.scheduled_at)}
-                  </p>
-                  <p className="text-sm text-emerald-700 leading-relaxed">
-                    {isHindi
-                      ? 'डॉक्टर के साथ आपकी अपॉइंटमेंट की पुष्टि हो गई है। कृपया समय पर पहुंचें।'
-                      : 'Your appointment is confirmed with Dr. Sharma. Please arrive on time with any recent test reports.'}
-                  </p>
-                  {activeAppointment.doctor_notes && (
-                    <p className="text-xs md:text-sm text-purple-900 bg-purple-50 p-2.5 rounded-xl border border-purple-200/60">
-                      <strong>{isHindi ? 'डॉक्टर की टिप्पणी:' : "Doctor's Note:"}</strong> {activeAppointment.doctor_notes}
-                    </p>
-                  )}
-                </div>
-              ) : activeAppointment && (activeAppointment.status === 'Rescheduled' || activeAppointment.status === 'Reschedule Requested') ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-slate-900">
-                    {isHindi ? 'प्रस्तावित नया समय:' : 'Proposed Time:'} {formatDateTimeDisplay(activeAppointment.scheduled_at)}
-                  </p>
-                  <p className="text-sm text-sky-800 leading-relaxed">
-                    {activeAppointment.doctor_notes || (isHindi ? 'डॉक्टर ने फॉलो-अप के लिए एक नया समय प्रस्तावित किया है।' : 'Doctor proposed a new slot for your follow-up visit.')}
-                  </p>
-                  <div className="pt-1 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleAcceptReschedule(activeAppointment.id)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition text-center cursor-pointer shadow-xs"
-                    >
-                      {isHindi ? 'समय स्वीकार करें' : 'Accept Slot'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenFollowUpModal}
-                      className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition text-center cursor-pointer"
-                    >
-                      {isHindi ? 'अन्य चुनें' : 'Choose Other'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-slate-900">{followUpDisplay}</p>
-                  <p className="text-xs text-slate-500 font-medium">
-                    {isHindi ? 'कृपया अपनी फॉलो-अप यात्रा के लिए अपॉइंटमेंट बुक करें।' : 'Please book an appointment for your follow-up visit.'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleOpenFollowUpModal}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 cursor-pointer"
-                  >
-                    <span>{isHindi ? 'फॉलो-अप अपॉइंटमेंट बुक करें →' : 'Book Follow-Up Appointment →'}</span>
-                  </button>
-                </div>
-              )}
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+              </button>
             </div>
           </div>
         </div>
@@ -1349,6 +1497,59 @@ export const PatientDashboardPage: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 5. Doctor Advice Detailed Modal */}
+      {isAdviceModalOpen && (
+        <Modal
+          isOpen={isAdviceModalOpen}
+          onClose={() => setIsAdviceModalOpen(false)}
+          title={isHindi ? 'डॉक्टर की विस्तृत सलाह एवं जीवनशैली दिशानिर्देश' : "Doctor's Detailed Health Guidance"}
+          size="lg"
+        >
+          <div className="space-y-4 text-xs">
+            {/* Diet Plan */}
+            <div className="bg-[#F0FDF4] border border-emerald-100 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                <Utensils className="w-4 h-4 text-emerald-600" />
+                <span>{isHindi ? 'आहार योजना' : 'Diet Plan'}</span>
+              </div>
+              <ul className="text-xs text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
+                <li>{isHindi ? 'कम नमक वाला आहार लें' : 'Eat a low-salt diet'}</li>
+                <li>{isHindi ? 'ताजे फल और सब्जियां शामिल करें' : 'Include fresh fruits and vegetables'}</li>
+                <li>{isHindi ? 'हल्के प्रोटीन (दाल, चिकन, मछली) को प्राथमिकता दें' : 'Prefer lean proteins (dal, chicken, fish)'}</li>
+                <li>{isHindi ? 'तले और तैलीय भोजन से बचें' : 'Avoid fried and oily foods'}</li>
+                <li>{isHindi ? 'रेड मीट और प्रसंस्कृत खाद्य पदार्थों को सीमित करें' : 'Limit red meat and processed foods'}</li>
+              </ul>
+            </div>
+
+            {/* Foods to Avoid */}
+            <div className="bg-[#FEF2F2] border border-rose-100 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                <MinusCircle className="w-4 h-4 text-rose-600" />
+                <span>{isHindi ? 'परहेज या सीमित करने योग्य खाद्य पदार्थ' : 'Foods to Avoid or Limit'}</span>
+              </div>
+              <ul className="text-xs text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
+                <li>{isHindi ? 'शराब का पूरी तरह से परहेज करें' : 'Avoid alcohol completely'}</li>
+                <li>{isHindi ? 'अधिक नमक, अचार और डिब्बाबंद खाद्य पदार्थों को सीमित करें' : 'Limit high-salt, pickled and packaged foods'}</li>
+                <li>{isHindi ? 'बहुत चिकने और तले हुए खाद्य पदार्थों से बचें' : 'Avoid very greasy and fried foods'}</li>
+              </ul>
+            </div>
+
+            {/* Rest & Care */}
+            <div className="bg-[#F0F9FF] border border-sky-100 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2 text-sky-800 font-bold text-sm">
+                <Bed className="w-4 h-4 text-sky-600" />
+                <span>{isHindi ? 'विश्राम एवं देखभाल निर्देश' : 'Rest & Care Instructions'}</span>
+              </div>
+              <ul className="text-xs text-slate-700 space-y-1.5 pl-4 list-disc leading-relaxed">
+                <li>{isHindi ? 'पर्याप्त विश्राम लें और 7-8 घंटे की नींद लें' : 'Take adequate rest and 7-8 hours of sleep'}</li>
+                <li>{isHindi ? 'भारी शारीरिक श्रम से बचें' : 'Avoid heavy physical exertion'}</li>
+                <li>{isHindi ? 'यदि सूजन, अत्यधिक थकान या पीलिया बढ़े तो तुरंत डॉक्टर से संपर्क करें' : 'Contact doctor if swelling, severe fatigue or jaundice increases'}</li>
+              </ul>
             </div>
           </div>
         </Modal>

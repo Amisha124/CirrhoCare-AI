@@ -60,8 +60,8 @@ export const DashboardLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 w-full overflow-x-hidden">
         <TopNavbar onMobileMenuOpen={() => setIsMobileOpen(true)} />
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
-          {/* Breadcrumbs (only on subpages, not main admin, patient, or lab dashboards) */}
-          {pathnames.length > 0 && location.pathname !== '/admin' && location.pathname !== '/patient' && location.pathname !== '/lab' && (
+          {/* Breadcrumbs (only on subpages, not main admin, doctor, patient, or lab dashboards) */}
+          {pathnames.length > 0 && location.pathname !== '/admin' && location.pathname !== '/doctor' && location.pathname !== '/patient' && location.pathname !== '/lab' && (
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400 mb-6 font-medium">
               <Link to="/" className="hover:text-blue-600 transition">
                 <span>{isHindi ? 'सिरोकेयर एआई' : 'CirrhoCare AI'}</span>

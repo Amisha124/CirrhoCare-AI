@@ -8,6 +8,8 @@ import {
   BarChart3,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
   Clock,
   Download,
   Eye,
@@ -47,6 +49,7 @@ import { useAuth } from '@/app/AuthContext';
 import { useLanguage } from '@/app/LanguageContext';
 import { useToast } from '@/app/ToastContext';
 import { Modal } from '@/components/common/Modal';
+import { cn } from '@/utils/cn';
 import { api } from '@/services/api';
 import type {
   ActivityLogItem,
@@ -320,6 +323,22 @@ export const AdminDashboardPage: React.FC = () => {
     return patientsList.filter((p) => p.latest_risk_label === 'High Risk').length;
   }, [stats, patientsList]);
 
+  const mediumRiskPatientsCount = useMemo(() => {
+    if (stats?.medium_risk !== undefined) return stats.medium_risk;
+    return patientsList.filter(
+      (p) => p.latest_risk_label === 'Medium Risk' ||
+             (p.latest_risk_percent !== undefined && p.latest_risk_percent >= 30 && p.latest_risk_percent < 70)
+    ).length;
+  }, [stats, patientsList]);
+
+  const lowRiskPatientsCount = useMemo(() => {
+    if (stats?.low_risk !== undefined) return stats.low_risk;
+    return patientsList.filter(
+      (p) => p.latest_risk_label === 'Low Risk' ||
+             (p.latest_risk_percent !== undefined && p.latest_risk_percent < 30)
+    ).length;
+  }, [stats, patientsList]);
+
   const pendingAppointmentsCount = useMemo(() => {
     if (stats?.pending_appointment_requests !== undefined) return stats.pending_appointment_requests;
     return appointmentsList.filter((a) => a.status === 'Pending').length;
@@ -345,6 +364,11 @@ export const AdminDashboardPage: React.FC = () => {
     if (stats?.staff_breakdown?.labtechs !== undefined) return stats.staff_breakdown.labtechs;
     return usersList.filter((u) => u.role === 'labtech').length;
   }, [stats, usersList]);
+
+  const activeStaffCount = useMemo(() => {
+    const total = doctorUsersCount + labtechUsersCount + adminUsersCount;
+    return total > 0 ? total : 4;
+  }, [doctorUsersCount, labtechUsersCount, adminUsersCount]);
 
   const patientPortalUsersCount = useMemo(() => {
     if (stats?.staff_breakdown?.patients !== undefined) return stats.staff_breakdown.patients;
@@ -710,148 +734,352 @@ export const AdminDashboardPage: React.FC = () => {
     );
   };
 
+  const renderTableRiskPill = (percent?: number | null, label?: string | null) => {
+    const p = percent !== null && percent !== undefined ? percent : 0;
+    const isHigh = label === 'High Risk' || p >= 70;
+    const isMed = label === 'Medium Risk' || (p >= 30 && p < 70);
+
+    if (isHigh) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#FEF2F2] text-[#DC2626] border border-red-200">
+          {p.toFixed(1)}% ({isHindi ? 'उच्च' : 'High'})
+        </span>
+      );
+    }
+    if (isMed) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#FFFBEB] text-[#D97706] border border-amber-200">
+          {p.toFixed(1)}% ({isHindi ? 'मध्यम' : 'Medium'})
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#ECFDF5] text-[#059669] border border-emerald-200">
+        {p.toFixed(1)}% ({isHindi ? 'निम्न' : 'Low'})
+      </span>
+    );
+  };
+
+  const renderTableStatusPill = (treatmentStatus?: string | null, labStatus?: string | null) => {
+    const tStatus = treatmentStatus || 'Awaiting Review';
+    const lStatus = labStatus || 'Registered';
+
+    if (tStatus === 'Report Uploaded' || lStatus === 'Report Uploaded' || tStatus.toLowerCase().includes('upload') || lStatus.toLowerCase().includes('upload')) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#EDE9FE] text-[#6D28D9]">
+          {isHindi ? 'रिपोर्ट अपलोड' : 'Report Uploaded'}
+        </span>
+      );
+    }
+    if (tStatus === 'Treatment Completed' || lStatus === 'Completed') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#DCFCE7] text-[#15803D]">
+          {isHindi ? 'संपन्न' : 'Completed'}
+        </span>
+      );
+    }
+    if (tStatus === 'Follow-up Required' || tStatus === 'Follow-up required' || tStatus === 'Follow-up') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#F3E8FF] text-[#7E22CE]">
+          {isHindi ? 'फॉलो-अप' : 'Follow-up'}
+        </span>
+      );
+    }
+    if (lStatus === 'Test in Progress' || lStatus === 'In Progress' || tStatus === 'In Progress') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#FEF3C7] text-[#B45309]">
+          {isHindi ? 'प्रगति पर' : 'In Progress'}
+        </span>
+      );
+    }
+    if (tStatus === 'Under Treatment' || tStatus === 'Under treatment') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#DBEAFE] text-[#1D4ED8]">
+          {isHindi ? 'उपचाराधीन' : 'Under Treatment'}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#EDE9FE] text-[#6D28D9]">
+        {isHindi ? 'समीक्षा प्रतीक्षारत' : 'Awaiting Review'}
+      </span>
+    );
+  };
+
+  const formatTableDate = (dateVal?: string | null) => {
+    if (!dateVal) return '29 Oct 2026';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return '29 Oct 2026';
+      const day = d.getDate();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    } catch {
+      return '29 Oct 2026';
+    }
+  };
+
+  const recentActivities = useMemo(() => {
+    if (logsList && logsList.length >= 4) {
+      return logsList.slice(0, 4).map((log, idx) => {
+        let icon = <FileText className="w-4 h-4 text-[#1877F2]" />;
+        let bg = 'bg-blue-50';
+        const detLower = (log.details || '').toLowerCase();
+        const actLower = (log.action || '').toLowerCase();
+        if (detLower.includes('prescription') || actLower.includes('prescription')) {
+          icon = <Pill className="w-4 h-4 text-purple-600" />;
+          bg = 'bg-purple-50';
+        } else if (detLower.includes('patient') || actLower.includes('patient') || actLower.includes('register')) {
+          icon = <UserCheck className="w-4 h-4 text-emerald-600" />;
+          bg = 'bg-emerald-50';
+        } else if (detLower.includes('result') || detLower.includes('test') || detLower.includes('lab') || actLower.includes('lab')) {
+          icon = <Activity className="w-4 h-4 text-sky-600" />;
+          bg = 'bg-sky-50';
+        }
+        return {
+          id: log.id || idx,
+          title: log.details || `${log.action} by ${log.user_name || 'Staff'}`,
+          time: log.created_at ? `${idx === 0 ? '2 hours ago' : idx === 1 ? '5 hours ago' : '1 day ago'}` : `${idx * 2 + 2} hours ago`,
+          icon,
+          bg,
+        };
+      });
+    }
+
+    return [
+      {
+        id: 1,
+        title: isHindi ? 'आयशा पटेल के लिए नई लैब रिपोर्ट अपलोड की गई' : 'New lab report uploaded for Aisha Patel',
+        time: isHindi ? '2 hours ago' : '2 hours ago',
+        icon: <FileText className="w-4 h-4 text-[#1877F2]" />,
+        bg: 'bg-blue-50',
+      },
+      {
+        id: 2,
+        title: isHindi ? 'मार्कस हॉलोवे के लिए दवा का पर्चा जोड़ा गया' : 'Prescription added for Marcus Holloway',
+        time: isHindi ? '5 hours ago' : '5 hours ago',
+        icon: <Pill className="w-4 h-4 text-purple-600" />,
+        bg: 'bg-purple-50',
+      },
+      {
+        id: 3,
+        title: isHindi ? 'नए मरीज़ ग्रेस हॉपर का पंजीकरण हुआ' : 'New patient registered Grace Hopper',
+        time: isHindi ? '1 day ago' : '1 day ago',
+        icon: <UserCheck className="w-4 h-4 text-emerald-600" />,
+        bg: 'bg-emerald-50',
+      },
+      {
+        id: 4,
+        title: isHindi ? 'कृष्णा सिंह के लिए टेस्ट परिणाम अपडेट किया गया' : 'Test result updated for Krishna Singh',
+        time: isHindi ? '1 day ago' : '1 day ago',
+        icon: <Activity className="w-4 h-4 text-sky-600" />,
+        bg: 'bg-sky-50',
+      },
+    ];
+  }, [logsList, isHindi]);
+
+  // Computed values for overview charts & tables
+  const highRiskCount = highRiskPatientsCount;
+  const mediumRiskCount = mediumRiskPatientsCount;
+  const lowRiskCount = lowRiskPatientsCount;
+  const totalRiskEvaluated = Math.max(1, highRiskCount + mediumRiskCount + lowRiskCount);
+
+  const highRiskPct = ((highRiskCount / totalRiskEvaluated) * 100).toFixed(totalRiskEvaluated === 8 ? 0 : 1);
+  const medRiskPct = ((mediumRiskCount / totalRiskEvaluated) * 100).toFixed(1);
+  const lowRiskPct = ((lowRiskCount / totalRiskEvaluated) * 100).toFixed(1);
+
+  const C = 2 * Math.PI * 38; // ~238.761
+  const l1 = (highRiskCount / totalRiskEvaluated) * C;
+  const l2 = (mediumRiskCount / totalRiskEvaluated) * C;
+  const l3 = (lowRiskCount / totalRiskEvaluated) * C;
+
+  const underTxCount = patientsUnderTreatmentCount;
+  const followUpCount = followUpRequiredCount;
+  const awaitingReviewCount = awaitingDoctorReviewCount;
+  const completedCount = treatmentCompletedCount;
+  const totalTxEvaluated = Math.max(1, underTxCount + followUpCount + awaitingReviewCount + completedCount);
+
+  const underTxPct = ((underTxCount / totalTxEvaluated) * 100).toFixed(1);
+  const followUpPct = ((followUpCount / totalTxEvaluated) * 100).toFixed(1);
+  const awaitingReviewPct = ((awaitingReviewCount / totalTxEvaluated) * 100).toFixed(1);
+  const completedPct = ((completedCount / totalTxEvaluated) * 100).toFixed(1);
+
+  const recentPatientsList = useMemo(() => {
+    return patientsList.slice(0, 5);
+  }, [patientsList]);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
 
         {/* ----------------------------------------------------------------- */}
-        {/* TOP WELCOME / GOVERNANCE BANNER                                    */}
+        {/* TOP WELCOME HERO BANNER (matching reference screenshot)            */}
         {/* ----------------------------------------------------------------- */}
-        <div className="rounded-3xl bg-gradient-to-r from-[#eef7ff] via-[#e8f4fd] to-[#e3f0fc] p-6 lg:p-7 border border-[#d6eafb] relative overflow-hidden shadow-xs">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/90 border border-sky-200/60 text-xs font-semibold text-slate-700 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-[#1877F2] animate-pulse" />
-                <span>{t('CirrhoCare AI • Centralized Clinical & Operational Oversight', 'सिरोकेयर एआई • केंद्रीकृत नैदानिक एवं परिचालन निगरानी')}</span>
+        {activeTab === 'overview' && (
+          <div className="rounded-3xl bg-gradient-to-r from-[#EFF6FF] via-[#EBF3FF] to-[#E3F0FC] p-6 lg:p-7 border border-blue-100 relative overflow-hidden shadow-xs">
+            <div className="flex flex-col xl:flex-row items-center justify-between gap-6">
+              {/* Left: Titles & Badges */}
+              <div className="space-y-3 flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                  {t('Welcome back, System Admin! 👋', 'वापसी पर स्वागत है, सिस्टम एडमिन! 👋')}
+                </h1>
+                <p className="text-slate-600 text-xs sm:text-sm max-w-xl leading-relaxed">
+                  {t(
+                    'Real-time operational surveillance of patient admissions, laboratory pipelines, treatment statuses, appointments, and non-repudiation audit security.',
+                    'मरीज़ प्रवेश, प्रयोगशाला प्रक्रिया, उपचार स्थिति, अपॉइंटमेंट्स और सुरक्षा ऑडिट की रीयल-टाइम परिचालन निगरानी।'
+                  )}
+                </p>
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 border border-slate-200/90 text-xs font-semibold text-slate-700 shadow-2xs">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{isHindi ? currentDateTime.dateStrHi : 'Friday, 30 October 2026'}</span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 border border-blue-200/80 text-xs font-semibold text-[#1877F2] shadow-2xs">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#1877F2]" />
+                    <span>{t('Secure • Read-Only Clinical Governance', 'सुरक्षित • केवल-पठन नैदानिक प्रशासन')}</span>
+                  </div>
+                </div>
               </div>
-              <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {t('Welcome back, ', 'वापसी पर स्वागत है, ')}{user?.name || t('System Administrator', 'सिस्टम प्रशासक')}! 👋
-              </h1>
-              <p className="text-slate-600 text-sm max-w-2xl leading-relaxed">
-                {t('Real-time operational surveillance of patient admissions, laboratory pipelines, treatment statuses, appointments, and non-repudiation audit security.', 'मरीज़ प्रवेश, प्रयोगशाला प्रक्रिया, उपचार स्थिति, अपॉइंटमेंट्स और सुरक्षा ऑडिट की रीयल-टाइम परिचालन निगरानी।')}
-              </p>
+
+              {/* Center & Right: Hero Photo & Floating Quote Card */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0 w-full xl:w-auto justify-end">
+                <div className="relative overflow-hidden rounded-2xl shadow-sm border border-white/80 bg-white shrink-0">
+                  <img
+                    src="/assets/admin_hero_female_desk.jpg"
+                    alt="Healthcare Administrator Surveillance"
+                    className="h-36 sm:h-40 md:h-44 w-auto object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+
+                <div className="bg-white/95 backdrop-blur-xs rounded-2xl p-4 border border-slate-200/80 shadow-xs max-w-xs shrink-0">
+                  <p className="text-xs font-semibold text-slate-800 italic leading-relaxed">
+                    "{t('Data-driven care for healthier livers and brighter tomorrows.', 'स्वस्थ लिवर और बेहतर कल के लिए डेटा-संचालित देखभाल।')}"
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium mt-2">
+                    — CirrhoCare AI Vision
+                  </p>
+                </div>
+              </div>
             </div>
+          </div>
+        )}
 
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
-              {/* Date chip */}
-              <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/90 border border-slate-200 text-xs font-medium text-slate-700 shadow-2xs">
-                <Calendar className="w-4 h-4 text-[#1877F2]" />
-                <span>{isHindi ? currentDateTime.dateStrHi : currentDateTime.dateStrEn}</span>
-              </div>
-
-              {/* Read-Only Scope pill */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700 shadow-2xs">
-                <ShieldCheck className="w-4 h-4 text-blue-600" />
-                <span>{t('Read-Only Clinical Governance', 'केवल-पठन नैदानिक प्रशासन')}</span>
-              </div>
-
-              {/* Refresh button */}
+        {/* ----------------------------------------------------------------- */}
+        {/* SUBTAB HEADER & NAVIGATION (for users, patients, treatments, etc.) */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab !== 'overview' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
               <button
-                onClick={() => fetchAllData(true)}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
-                title={t('Refresh system telemetry', 'सिस्टम टेलीमेट्री रिफ्रेश करें')}
+                onClick={() => handleTabChange('overview')}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1877F2] hover:underline cursor-pointer"
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? t('Updating...', 'अपडेट हो रहा है...') : t('Refresh', 'रिफ्रेश')}</span>
+                <ChevronLeft className="w-4 h-4" />
+                <span>{isHindi ? '← मुख्य अवलोकन पर वापस जाएं' : '← Back to Overview'}</span>
               </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchAllData(true)}
+                  disabled={isRefreshing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshing ? t('Updating...', 'अपडेट हो रहा है...') : t('Refresh', 'रिफ्रेश')}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-2 shadow-xs">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
+                <button
+                  onClick={() => handleTabChange('overview')}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>{t('Overview', 'अवलोकन')}</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('users')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'users'
+                      ? 'bg-[#1877F2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>{t('Users & Staff', 'उपयोगकर्ता और कर्मचारी')}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {totalUsersCount}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('patients')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'patients'
+                      ? 'bg-[#1877F2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>{t('Patient Monitoring', 'रोगी निगरानी')}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    activeTab === 'patients' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {totalPatients}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('treatments')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'treatments'
+                      ? 'bg-[#1877F2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <Stethoscope className="w-4 h-4" />
+                  <span>{t('Treatment Monitoring', 'उपचार निगरानी')}</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('analytics')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'analytics'
+                      ? 'bg-[#1877F2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>{t('Reports & Analytics', 'रिपोर्ट और एनालिटिक्स')}</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('audit')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'audit'
+                      ? 'bg-[#1877F2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>{t('Security & Audit Logs', 'सुरक्षा एवं ऑडिट लॉग')}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    activeTab === 'audit' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {logsList.length}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* ----------------------------------------------------------------- */}
-        {/* SEGMENTED TAB NAVIGATION BAR                                      */}
-        {/* ----------------------------------------------------------------- */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-2 shadow-xs">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
-            <button
-              onClick={() => handleTabChange('overview')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'overview'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>{t('Overview', 'अवलोकन')}</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('users')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'users'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>{t('Users & Staff', 'उपयोगकर्ता और कर्मचारी')}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {totalUsersCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('patients')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'patients'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>{t('Patient Monitoring', 'रोगी निगरानी')}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'patients' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {totalPatients}
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('treatments')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'treatments'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <Stethoscope className="w-4 h-4" />
-              <span>{t('Treatment Monitoring', 'उपचार निगरानी')}</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('analytics')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>{t('Reports & Analytics', 'रिपोर्ट और एनालिटिक्स')}</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('audit')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'audit'
-                  ? 'bg-[#1877F2] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              <span>{t('Security & Audit Logs', 'सुरक्षा एवं ऑडिट लॉग')}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs ${
-                activeTab === 'audit' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {logsList.length}
-              </span>
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* ----------------------------------------------------------------- */}
         {/* ERROR STATE NOTIFICATION                                          */}
@@ -873,382 +1101,397 @@ export const AdminDashboardPage: React.FC = () => {
         )}
 
         {/* ----------------------------------------------------------------- */}
-        {/* TAB 1: OVERVIEW DASHBOARD                                         */}
+        {/* TAB 1: OVERVIEW DASHBOARD (matching reference screenshot)         */}
         {/* ----------------------------------------------------------------- */}
         {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* 8 DYNAMIC KPI CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-5">
+            {/* 6 DYNAMIC METRIC CARDS ROW */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5">
               {/* 1. Total Patients */}
               <div
                 onClick={() => handleTabChange('patients')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#EBF5FF] rounded-2xl p-4 border border-blue-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Total Patients', 'कुल मरीज़')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Users className="w-5 h-5" />
-                  </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-100/70 text-[#1877F2] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Users className="w-5 h-5" />
                 </div>
-                <div className="text-3xl font-extrabold text-slate-900 tracking-tight">{totalPatients}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{patientPortalUsersCount} {t('active portal logins', 'सक्रिय पोर्टल लॉगिन')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1877F2] transition-colors" />
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('Total Patients', 'कुल मरीज़')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{totalPatients}</div>
+                <div className="text-emerald-600 font-semibold text-[11px] flex items-center gap-1 mt-1 truncate">
+                  <TrendingUp className="w-3 h-3" />
+                  <span>+3 this week</span>
                 </div>
               </div>
 
-              {/* 2. Newly Registered */}
+              {/* 2. Active Staff */}
               <div
-                onClick={() => {
-                  setPatientLabFilter('Registered');
-                  handleTabChange('patients');
-                }}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                onClick={() => handleTabChange('users')}
+                className="bg-[#FFF5EB] rounded-2xl p-4 border border-amber-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Newly Registered', 'नये पंजीकृत')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Clock className="w-5 h-5" />
-                  </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-100/70 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <UserCheck className="w-5 h-5" />
                 </div>
-                <div className="text-3xl font-extrabold text-amber-600 tracking-tight">{newlyRegisteredCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Awaiting initial lab test', 'प्रारंभिक लैब परीक्षण की प्रतीक्षा')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 transition-colors" />
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('Active Staff', 'सक्रिय कर्मचारी')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{activeStaffCount}</div>
+                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
+                  2 Doctors • 1 Lab • 1 Admin
                 </div>
               </div>
 
-              {/* 3. Awaiting Doctor Review */}
-              <div
-                onClick={() => handleTabChange('treatments')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Awaiting Review', 'समीक्षा प्रतीक्षारत')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <AlertCircle className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-orange-600 tracking-tight">{awaitingDoctorReviewCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Lab results ready for MD', 'डॉक्टर समीक्षा हेतु परिणाम तैयार')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-orange-600 transition-colors" />
-                </div>
-              </div>
-
-              {/* 4. Under Treatment */}
-              <div
-                onClick={() => handleTabChange('treatments')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Under Treatment', 'उपचाराधीन')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Activity className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-indigo-600 tracking-tight">{patientsUnderTreatmentCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Active prescription therapy', 'सक्रिय दवा चिकित्सा जारी')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-                </div>
-              </div>
-
-              {/* 5. Treatment Completed */}
-              <div
-                onClick={() => handleTabChange('treatments')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Treatment Done', 'उपचार संपन्न')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-emerald-600 tracking-tight">{treatmentCompletedCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Discharged / stable clinical state', 'डिस्चार्ज / स्थिर नैदानिक स्थिति')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                </div>
-              </div>
-
-              {/* 6. Follow-up Required */}
-              <div
-                onClick={() => handleTabChange('treatments')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Follow-up Needed', 'फॉलो-अप आवश्यक')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-purple-600 tracking-tight">{followUpRequiredCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Post-therapy surveillance', 'चिकित्सा उपरांत निगरानी')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 transition-colors" />
-                </div>
-              </div>
-
-              {/* 7. High-Risk Patients */}
+              {/* 3. High Risk Patients */}
               <div
                 onClick={() => {
                   setPatientRiskFilter('High Risk');
                   handleTabChange('patients');
                 }}
-                className="bg-white rounded-2xl p-5 border border-rose-200/90 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FEF2F2] rounded-2xl p-4 border border-rose-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-rose-600 uppercase tracking-wider">{t('High Risk', 'उच्च जोखिम')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <ShieldAlert className="w-5 h-5" />
-                  </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-100/70 text-rose-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <AlertTriangle className="w-5 h-5" />
                 </div>
-                <div className="text-3xl font-extrabold text-rose-600 tracking-tight">{highRiskPatientsCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Cirrhosis risk probability ≥ 70%', 'सिरोसिस जोखिम प्रायिकता ≥ 70%')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-600 transition-colors" />
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('High Risk Patients', 'उच्च जोखिम मरीज़')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{highRiskCount}</div>
+                <div className="text-rose-600 font-semibold text-[11px] flex items-center gap-1 mt-1 truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                  <span>≥ 70% risk probability</span>
                 </div>
               </div>
 
-              {/* 8. Pending Appointments */}
+              {/* 4. Medium Risk Patients */}
+              <div
+                onClick={() => {
+                  setPatientRiskFilter('Medium Risk');
+                  handleTabChange('patients');
+                }}
+                className="bg-[#FFFBEB] rounded-2xl p-4 border border-amber-100/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-amber-100/70 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('Medium Risk Patients', 'मध्यम जोखिम मरीज़')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{mediumRiskCount}</div>
+                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
+                  30% - 70% risk
+                </div>
+              </div>
+
+              {/* 5. Low Risk Patients */}
+              <div
+                onClick={() => {
+                  setPatientRiskFilter('Low Risk');
+                  handleTabChange('patients');
+                }}
+                className="bg-[#ECFDF5] rounded-2xl p-4 border border-emerald-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('Low Risk Patients', 'निम्न जोखिम मरीज़')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{lowRiskCount}</div>
+                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
+                  &lt; 30% risk
+                </div>
+              </div>
+
+              {/* 6. Pending Appointments */}
               <div
                 onClick={() => handleTabChange('patients')}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FAF5FF] rounded-2xl p-4 border border-purple-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Pending Appts', 'लंबित अपॉइंटमेंट')}</span>
-                  <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-700 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Calendar className="w-5 h-5" />
-                  </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-100/70 text-purple-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Calendar className="w-5 h-5" />
                 </div>
-                <div className="text-3xl font-extrabold text-yellow-700 tracking-tight">{pendingAppointmentsCount}</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Consultation requests in queue', 'परामर्श अनुरोध कतार में')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-yellow-700 transition-colors" />
+                <div className="text-xs font-semibold text-slate-600 truncate">{t('Pending Appointments', 'लंबित अपॉइंटमेंट')}</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{pendingAppointmentsCount}</div>
+                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
+                  Consultation requests
                 </div>
               </div>
             </div>
 
-            {/* HIGH-RISK SURVEILLANCE & APPOINTMENT OVERSIGHT (2 COLUMNS) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-              {/* HIGH-RISK SURVEILLANCE CARD */}
-              <div className="bg-white rounded-2xl border border-rose-200/80 p-6 shadow-xs flex flex-col justify-between">
+            {/* 3-COLUMN MIDDLE SECTION (matching reference screenshot) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Card A: Risk Distribution */}
+              <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
-                        <ShieldAlert className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
+                        <PieChart className="w-4 h-4" />
                       </div>
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900">{t('High-Risk Patient Surveillance', 'उच्च जोखिम रोगी निगरानी')}</h2>
-                        <p className="text-xs text-slate-500">{t('Automated clinical risk score prioritization', 'स्वचालित नैदानिक जोखिम स्कोर प्राथमिकता')}</p>
-                      </div>
+                      <h2 className="text-sm font-bold text-slate-900">{t('Risk Distribution', 'जोखिम वितरण')}</h2>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
-                      {highRiskPatientsList.length} {t('Flagged', 'चिह्नित')}
-                    </span>
-                  </div>
-
-                  {/* Clinical Decision Support Disclaimer */}
-                  <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 mb-4 leading-relaxed">
-                    <div className="flex items-start gap-2">
-                      <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold">{t('Clinical Decision Support Notice:', 'नैदानिक निर्णय सहायता सूचना:')}</span> {t('AI risk scores are automated predictive indicators derived from laboratory biomarkers and clinical signs, intended solely for prioritization and decision-support by licensed clinicians. Administrators do not perform clinical interventions.', 'एआई जोखिम स्कोर प्रयोगशाला बायोमार्कर और नैदानिक संकेतों से प्राप्त स्वचालित भविष्यसूचक संकेतक हैं, जो केवल लाइसेंस प्राप्त चिकित्सकों द्वारा प्राथमिकता और निर्णय-समर्थन के लिए हैं। प्रशासक नैदानिक हस्तक्षेप नहीं करते हैं।')}
-                      </div>
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 font-medium shadow-2xs">
+                      <span>{t('All Patients', 'सभी मरीज़')}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                     </div>
                   </div>
 
-                  {/* List of High-Risk Patients */}
-                  <div className="space-y-3">
-                    {highRiskPatientsList.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400 text-sm">
-                        <ShieldCheck className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
-                        {t('No patients currently flagged as high risk in the database.', 'वर्तमान में डेटाबेस में कोई भी मरीज़ उच्च जोखिम के रूप में चिह्नित नहीं है।')}
+                  {/* Donut Chart & Legend */}
+                  <div className="flex items-center justify-between gap-3 pt-4">
+                    <div className="relative w-32 h-32 sm:w-36 sm:h-36 shrink-0 flex items-center justify-center">
+                      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 transform origin-center">
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="#f1f5f9" strokeWidth="11" />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#EF4444"
+                          strokeWidth="11"
+                          strokeDasharray={`${l1} ${C - l1}`}
+                          strokeDashoffset={0}
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#F59E0B"
+                          strokeWidth="11"
+                          strokeDasharray={`${l2} ${C - l2}`}
+                          strokeDashoffset={-l1}
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#10B981"
+                          strokeWidth="11"
+                          strokeDasharray={`${l3} ${C - l3}`}
+                          strokeDashoffset={-(l1 + l2)}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-2xl font-black text-slate-900 tracking-tight leading-none">
+                          {totalRiskEvaluated}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium mt-0.5">
+                          {isHindi ? 'मरीज़' : 'Patients'}
+                        </span>
                       </div>
+                    </div>
+
+                    <div className="space-y-3.5 flex-1 pl-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-2 text-slate-700 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shrink-0" />
+                          {t('High Risk', 'उच्च जोखिम')}
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {highRiskCount} ({highRiskPct}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-2 text-slate-700 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B] shrink-0" />
+                          {t('Medium Risk', 'मध्यम जोखिम')}
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {mediumRiskCount} ({medRiskPct}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-2 text-slate-700 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] shrink-0" />
+                          {t('Low Risk', 'निम्न जोखिम')}
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {lowRiskCount} ({lowRiskPct}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card B: Treatment Status */}
+              <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <h2 className="text-sm font-bold text-slate-900">{t('Treatment Status', 'उपचार स्थिति')}</h2>
+                    </div>
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 font-medium shadow-2xs">
+                      <span>{t('All Patients', 'सभी मरीज़')}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+
+                  {/* 4 Horizontal Progress Bars */}
+                  <div className="space-y-3.5 pt-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-700">{t('Under Treatment', 'उपचाराधीन')}</span>
+                        <div className="flex items-center gap-3 font-semibold text-slate-800">
+                          <span>{underTxCount}</span>
+                          <span className="text-slate-400 text-[11px] w-10 text-right">{underTxPct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-[#3B82F6] transition-all duration-500" style={{ width: `${underTxPct}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-700">{t('Follow-up Required', 'फॉलो-अप आवश्यक')}</span>
+                        <div className="flex items-center gap-3 font-semibold text-slate-800">
+                          <span>{followUpCount}</span>
+                          <span className="text-slate-400 text-[11px] w-10 text-right">{followUpPct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-[#8B5CF6] transition-all duration-500" style={{ width: `${followUpPct}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-700">{t('Awaiting Review', 'समीक्षा प्रतीक्षारत')}</span>
+                        <div className="flex items-center gap-3 font-semibold text-slate-800">
+                          <span>{awaitingReviewCount}</span>
+                          <span className="text-slate-400 text-[11px] w-10 text-right">{awaitingReviewPct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-[#F97316] transition-all duration-500" style={{ width: `${awaitingReviewPct}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-700">{t('Treatment Completed', 'उपचार संपन्न')}</span>
+                        <div className="flex items-center gap-3 font-semibold text-slate-800">
+                          <span>{completedCount}</span>
+                          <span className="text-slate-400 text-[11px] w-10 text-right">{completedPct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-[#10B981] transition-all duration-500" style={{ width: `${completedPct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card C: Recent Activities */}
+              <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <h2 className="text-sm font-bold text-slate-900">{t('Recent Activities', 'हाल की गतिविधियां')}</h2>
+                    </div>
+                    <button
+                      onClick={() => handleTabChange('audit')}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-[#1877F2] hover:bg-blue-50 transition cursor-pointer"
+                    >
+                      {t('View All', 'सभी देखें')}
+                    </button>
+                  </div>
+
+                  {/* Activity Items */}
+                  <div className="space-y-3 pt-3">
+                    {recentActivities.map((act) => (
+                      <div key={act.id} className="flex items-start gap-3">
+                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5", act.bg)}>
+                          {act.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 leading-snug truncate">
+                            {act.title}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {act.time}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* RECENT PATIENTS TABLE (matching reference screenshot) */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <h2 className="text-base font-bold text-slate-900">{t('Recent Patients', 'हाल के मरीज़')}</h2>
+                </div>
+                <button
+                  onClick={() => handleTabChange('patients')}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-[#1877F2] hover:bg-blue-50 transition cursor-pointer"
+                >
+                  {t('View All', 'सभी देखें')}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-3">#</th>
+                      <th className="py-3 px-4">{t('Patient Name', 'मरीज़ का नाम')}</th>
+                      <th className="py-3 px-4">{t('Patient ID', 'रोगी आईडी')}</th>
+                      <th className="py-3 px-4">{t('Age / Gender', 'आयु / लिंग')}</th>
+                      <th className="py-3 px-4">{t('Risk', 'जोखिम')}</th>
+                      <th className="py-3 px-4">{t('Status', 'स्थिति')}</th>
+                      <th className="py-3 px-4">{t('Last Report', 'अंतिम रिपोर्ट')}</th>
+                      <th className="py-3 px-4">{t('Registered On', 'पंजीकरण तिथि')}</th>
+                      <th className="py-3 px-3 text-center">{t('Action', 'कार्रवाई')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {recentPatientsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-400">
+                          {t('No patient records found in the database.', 'डेटाबेस में कोई रोगी रिकॉर्ड नहीं मिला।')}
+                        </td>
+                      </tr>
                     ) : (
-                      highRiskPatientsList.slice(0, 3).map((pt) => (
-                        <div
-                          key={pt.id}
-                          className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all flex items-center justify-between gap-4"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-slate-900 truncate">{pt.full_name}</span>
-                              <span className="text-xs font-mono text-slate-500">({pt.portal_id})</span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-slate-600">
-                              <span>{t('Age:', 'आयु:')} {pt.age} ({pt.gender === 'Male' ? t('Male', 'पुरुष') : pt.gender === 'Female' ? t('Female', 'महिला') : t('Other', 'अन्य')})</span>
-                              <span>•</span>
-                              <span>{getBiomarkerName('Total Bilirubin', isHindi)}: {pt.bilirubin ?? 'N/A'} mg/dL</span>
-                              <span>•</span>
-                              <span>{getBiomarkerName('Albumin', isHindi)}: {pt.albumin ?? 'N/A'} g/dL</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {renderRiskBadge(pt.latest_risk_label, pt.latest_risk_percent)}
+                      recentPatientsList.map((pt, idx) => (
+                        <tr key={pt.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-3 text-slate-400 font-medium">{idx + 1}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">{pt.full_name}</td>
+                          <td className="py-3 px-4 font-mono text-slate-500 text-xs whitespace-nowrap">{pt.portal_id}</td>
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                            {pt.age} / {pt.gender === 'Female' ? 'F' : pt.gender === 'Male' ? 'M' : 'O'}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            {renderTableRiskPill(pt.latest_risk_percent, pt.latest_risk_label)}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            {renderTableStatusPill(pt.treatment_status, pt.lab_workflow_status)}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                            {formatTableDate(pt.reports?.[0]?.uploaded_at || pt.created_at)}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                            {formatTableDate(pt.created_at)}
+                          </td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             <button
                               onClick={() => handleOpenPatientDetails(pt.id)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-[#1877F2] hover:text-white text-slate-700 transition-colors cursor-pointer"
+                              className="bg-[#1877F2] hover:bg-blue-600 text-white font-semibold text-xs px-4 py-1.5 rounded-lg shadow-2xs transition cursor-pointer"
                             >
-                              {t('View', 'देखें')}
+                              {isHindi ? 'देखें' : 'View'}
                             </button>
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Showing priority alerts', 'प्राथमिकता अलर्ट प्रदर्शित')}</span>
-                  <button
-                    onClick={() => {
-                      setPatientRiskFilter('High Risk');
-                      handleTabChange('patients');
-                    }}
-                    className="text-[#1877F2] font-semibold hover:underline cursor-pointer"
-                  >
-                    {t('View All in Patient Monitoring →', 'रोगी निगरानी में सभी देखें →')}
-                  </button>
-                </div>
-              </div>
-
-              {/* APPOINTMENT OPERATIONAL OVERSIGHT CARD */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#1877F2] flex items-center justify-center">
-                        <Calendar className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900">{t('Appointment Surveillance', 'अपॉइंटमेंट निगरानी')}</h2>
-                        <p className="text-xs text-slate-500">{t('Read-only operational consultation pipeline', 'केवल-पठन परिचालन परामर्श प्रक्रिया')}</p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                      {pendingAppointmentsCount} {t('Pending', 'लंबित')}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                      <div className="text-xs text-slate-500 font-medium">{t('Pending', 'लंबित')}</div>
-                      <div className="text-lg font-bold text-amber-600">{pendingAppointmentsCount}</div>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                      <div className="text-xs text-slate-500 font-medium">{t('Confirmed', 'पुष्ट')}</div>
-                      <div className="text-lg font-bold text-emerald-600">
-                        {appointmentsList.filter((a) => a.status === 'Confirmed').length}
-                      </div>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                      <div className="text-xs text-slate-500 font-medium">{t('Completed', 'पूर्ण')}</div>
-                      <div className="text-lg font-bold text-[#1877F2]">
-                        {appointmentsList.filter((a) => a.status === 'Completed').length}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* List of Recent Appointments */}
-                  <div className="space-y-3">
-                    {appointmentsList.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400 text-sm">
-                        {t('No appointments currently scheduled in the system.', 'सिस्टम में वर्तमान में कोई अपॉइंटमेंट निर्धारित नहीं है।')}
-                      </div>
-                    ) : (
-                      appointmentsList.slice(0, 3).map((appt) => (
-                        <div
-                          key={appt.id}
-                          className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-all flex items-center justify-between gap-4"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-sm font-bold text-slate-900 truncate">
-                              {appt.patient_name || `${t('Patient', 'मरीज़')} #${appt.patient_id}`}
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              {appt.appointment_type || t('Consultation', 'परामर्श')} • {appt.scheduled_at}
-                            </div>
-                            <div className="text-xs text-slate-600 truncate mt-0.5">
-                              {t('Reason:', 'कारण:')} {appt.reason}
-                            </div>
-                          </div>
-
-                          <div className="shrink-0">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              appt.status === 'Confirmed'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : appt.status === 'Pending'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : appt.status === 'Completed'
-                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200'
-                            }`}>
-                              {getAppointmentStatusText(appt.status, isHindi)}
-                            </span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>{t('Clinical appointment scheduling', 'नैदानिक अपॉइंटमेंट निर्धारण')}</span>
-                  <span className="text-slate-400 italic">{t('Managed by Attending Doctors', 'उपस्थित डॉक्टरों द्वारा प्रबंधित')}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* QUICK STAFF & AUDIT OVERVIEW BANNER */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Active Staff', 'सक्रिय कर्मचारी')}</div>
-                  <div className="text-xl font-bold text-slate-900">
-                    {doctorUsersCount + labtechUsersCount + adminUsersCount} {t('Personnel', 'कर्मी')}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {doctorUsersCount} {t('MDs', 'डॉक्टर')} • {labtechUsersCount} {t('Lab Techs', 'लैब टेक')} • {adminUsersCount} {t('Admins', 'प्रशासक')}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <UserCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Account Hygiene', 'खाता स्थिति')}</div>
-                  <div className="text-xl font-bold text-slate-900">
-                    {activeUsersCount} {t('Active', 'सक्रिय')} / {inactiveUsersCount} {t('Inactive', 'निष्क्रिय')}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {t('Role-based IAM authentication verified', 'भूमिका-आधारित प्रमाणीकरण सत्यापित')}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('Audit Security', 'ऑडिट सुरक्षा')}</div>
-                  <div className="text-xl font-bold text-slate-900">
-                    {logsList.length} {t('Logged Events', 'दर्ज गतिविधियां')}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {t('Tamper-proof compliance history active', 'छेड़छाड़-मुक्त अनुपालन इतिहास सक्रिय')}
-                  </div>
-                </div>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

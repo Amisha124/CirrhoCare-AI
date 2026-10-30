@@ -219,7 +219,12 @@ def evaluate_biomarkers(patient):
 def normalize_clinical_status(status_str):
     if not status_str:
         return "Awaiting Doctor Review"
-    s = str(status_str).strip().lower()
+    raw = str(status_str).strip()
+    if raw in ("Under treatment", "Under Treatment", "Awaiting review", "Awaiting Doctor Review", "Follow-up Required", "Treatment Completed"):
+        return raw
+    s = raw.lower()
+    if s == "completed":
+        return "Completed"
     if "complete" in s:
         return "Treatment Completed"
     if "follow" in s:
@@ -228,7 +233,7 @@ def normalize_clinical_status(status_str):
         return "Under Treatment"
     if "await" in s or "review" in s or "urgent" in s or "pending" in s:
         return "Awaiting Doctor Review"
-    return str(status_str).strip()
+    return raw
 
 
 def normalize_lab_workflow_status(status_str):
@@ -294,6 +299,13 @@ def serialize_patient(patient, include_relations=False):
         ),
         "created_at": patient.created_at.isoformat() if patient.created_at else None,
         "updated_at": patient.updated_at.isoformat() if patient.updated_at else None,
+        "latest_test": (
+            patient.lab_orders[-1].test_type if getattr(patient, "lab_orders", None) and len(patient.lab_orders) > 0
+            else (
+                patient.reports[-1].category if getattr(patient, "reports", None) and len(patient.reports) > 0
+                else "Liver Function Test"
+            )
+        ),
         "evaluation": evaluate_biomarkers(patient),
     }
 

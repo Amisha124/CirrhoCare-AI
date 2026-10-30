@@ -764,7 +764,9 @@ def generate_clinical_patient_report_pdf(
     story = []
 
     # Metadata extraction
-    rep_id = getattr(report, "id", None) or getattr(patient, "id", 1000)
+    raw_rep_id = getattr(report, "id", None) or getattr(patient, "id", 1000)
+    rep_id = raw_rep_id
+    rep_id_str = f"REP-{raw_rep_id:04d}" if isinstance(raw_rep_id, int) else f"REP-{raw_rep_id}"
     rep_name = getattr(report, "original_filename", None) or getattr(report, "filename", "Diagnostic_LFT_Report.pdf")
     category = getattr(report, "category", "Liver Function Test (LFT)") or "Liver Function Test (LFT)"
     upload_dt = getattr(report, "uploaded_at", None) or getattr(patient, "created_at", datetime.now(timezone.utc))

@@ -97,7 +97,18 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/patients?q=${encodeURIComponent(searchQuery.trim())}`);
+      if (user?.role === 'labtech') {
+        navigate(`/lab?q=${encodeURIComponent(searchQuery.trim())}`);
+        window.dispatchEvent(new CustomEvent('labtech:search', { detail: searchQuery.trim() }));
+      } else if (user?.role === 'hepatologist') {
+        navigate(`/doctor?q=${encodeURIComponent(searchQuery.trim())}`);
+        window.dispatchEvent(new CustomEvent('doctor:search', { detail: searchQuery.trim() }));
+      } else if (user?.role === 'patient') {
+        navigate(`/patient?q=${encodeURIComponent(searchQuery.trim())}`);
+        window.dispatchEvent(new CustomEvent('patient:search', { detail: searchQuery.trim() }));
+      } else {
+        navigate(`/patients?q=${encodeURIComponent(searchQuery.trim())}`);
+      }
     }
   };
 
@@ -113,24 +124,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Global Search Bar (Clinicians) */}
-        {user?.role === 'patient' || user?.role === 'labtech' || user?.role === 'hepatologist' ? null : (
-          <form onSubmit={handleSearchSubmit} className="relative w-full max-w-md hidden sm:block">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder={
-                user?.role === 'admin'
-                  ? (language === 'hi' ? 'उपयोगकर्ता, मरीज़, रिपोर्ट्स या सेटिंग्स खोजें...' : 'Search users, patients, reports, or settings...')
-                  : (language === 'hi' ? 'मरीज़, आईडी, रिपोर्ट्स खोजें...' : 'Search patients, IDs, reports, or staff...')
-              }
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50/80 border border-slate-200/80 rounded-full outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition text-slate-800 placeholder:text-slate-400 font-normal"
-            />
-          </form>
-        )}
+        {/* Global Search Bar */}
+        <form onSubmit={handleSearchSubmit} className="relative w-full max-w-md hidden sm:block">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder={
+              user?.role === 'hepatologist'
+                ? (language === 'hi' ? 'मरीज़ का नाम, आईडी या जोखिम स्तर खोजें...' : 'Search patient by name, ID or risk level...')
+                : user?.role === 'labtech'
+                ? (language === 'hi' ? 'मरीज़ का नाम, मरीज़ आईडी या टेस्ट प्रकार खोजें...' : 'Search by patient name, patient ID or test type...')
+                : user?.role === 'admin'
+                ? (language === 'hi' ? 'मरीज़, उपयोगकर्ता, रिपोर्ट्स या सेटिंग्स खोजें...' : 'Search patients, users, reports, or settings...')
+                : user?.role === 'patient'
+                ? (language === 'hi' ? 'रिपोर्ट्स, दवाइयां, अपॉइंटमेंट्स या स्वास्थ्य मार्गदर्शन खोजें...' : 'Search reports, prescriptions, appointments, or health guidance...')
+                : (language === 'hi' ? 'मरीज़, आईडी, रिपोर्ट्स खोजें...' : 'Search patients, IDs, reports, or staff...')
+            }
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50/80 border border-slate-200/80 rounded-full outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition text-slate-800 placeholder:text-slate-400 font-normal"
+          />
+        </form>
       </div>
 
       {/* Right: Language switch, Notifications, User menu */}
@@ -174,7 +189,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
             <Bell className="w-5 h-5" />
             {(unreadCount > 0 || user?.role === 'hepatologist' || user?.role === 'admin' || user?.role === 'labtech' || user?.role === 'patient') && (
               <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white">
-                {user?.role === 'patient' ? '3' : unreadCount > 0 ? (unreadCount > 9 ? '9+' : unreadCount) : user?.role === 'admin' ? '9+' : '3'}
+                {user?.role === 'patient' ? '3' : unreadCount > 0 ? (unreadCount > 9 ? '9+' : unreadCount) : '3'}
               </span>
             )}
           </button>
@@ -252,19 +267,17 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
           )}
         </div>
 
-        {/* Help Circle Button (hidden for patient, labtech and doctor to match reference screenshot) */}
-        {user?.role !== 'labtech' && user?.role !== 'hepatologist' && user?.role !== 'patient' && (
-          <button
-            onClick={() => navigate('/settings')}
-            className="p-1.5 text-slate-500 hover:text-slate-800 transition cursor-pointer"
-            aria-label="Help and documentation"
-            title={language === 'hi' ? 'सहायता एवं दस्तावेज़' : 'Help & Support'}
-          >
-            <div className="w-5 h-5 rounded-full border-1.5 border-slate-400 flex items-center justify-center text-xs font-bold text-slate-500 hover:border-slate-800 hover:text-slate-800">
-              ?
-            </div>
-          </button>
-        )}
+        {/* Help Circle Button (matching reference screenshot for all dashboards) */}
+        <button
+          onClick={() => navigate('/settings')}
+          className="p-1.5 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+          aria-label="Help and documentation"
+          title={language === 'hi' ? 'सहायता एवं दस्तावेज़' : 'Help & Support'}
+        >
+          <div className="w-5 h-5 rounded-full border-1.5 border-slate-400 flex items-center justify-center text-xs font-bold text-slate-500 hover:border-slate-800 hover:text-slate-800">
+            ?
+          </div>
+        </button>
 
         {/* User Profile Dropdown Menu */}
         <div className="relative" ref={userMenuRef}>
@@ -274,23 +287,25 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
           >
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#1877F2] text-white flex items-center justify-center font-bold text-xs tracking-wider shadow-xs">
               {user?.role === 'admin'
-                ? 'AD'
+                ? 'SA'
                 : user?.role === 'hepatologist'
                 ? 'DR'
                 : user?.role === 'labtech'
                 ? 'LT'
-                : (user?.name ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'AK')}
+                : (user?.name ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'KS')}
             </div>
             <div className="hidden sm:block text-left">
               <div className="flex items-center gap-1">
                 <p className="text-sm font-bold text-slate-900 leading-tight">
                   {user?.role === 'admin'
-                    ? (user?.name && !user.name.toLowerCase().includes('demo') ? user.name : 'Admin User')
+                    ? (user?.name && !user.name.toLowerCase().includes('demo') && !user.name.toLowerCase().includes('admin user') ? user.name : 'System Admin')
                     : user?.role === 'hepatologist'
                     ? (user?.name && !user.name.toLowerCase().includes('hepato') ? user.name : 'Dr. Raj Sharma')
                     : user?.role === 'labtech'
                     ? (user?.name && !user.name.toLowerCase().includes('tech') && !user.name.toLowerCase().includes('demo') ? user.name : 'Neha Verma')
-                    : (user?.name || 'Anil Kapoor')}
+                    : user?.role === 'patient'
+                    ? (user?.name ? user.name.toLowerCase() : 'krishna singh')
+                    : (user?.name || 'krishna singh')}
                 </p>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </div>
@@ -298,7 +313,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ onMobileMenuOpen }) => {
                 {user?.role === 'admin'
                   ? (language === 'hi' ? 'प्रशासक' : 'Administrator')
                   : user?.role === 'patient'
-                  ? `${language === 'hi' ? 'मरीज़' : 'Patient'} | ${user?.portal_id || 'CC-2026-7780'}`
+                  ? `${language === 'hi' ? 'मरीज़' : 'Patient'} | ${user?.portal_id || 'CC-2026-6423'}`
                   : user?.role === 'hepatologist'
                   ? (language === 'hi' ? 'हेपेटोलॉजिस्ट' : 'Hepatologist')
                   : user?.role === 'labtech'

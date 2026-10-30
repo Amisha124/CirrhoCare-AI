@@ -54,6 +54,7 @@ export interface Patient {
   treatment_status: string;
   treatment_status_updated_at?: string | null;
   lab_workflow_status?: string | null;
+  latest_test?: string;
   doctor_confirmed_status?: string | null;
   doctor_confirmed_by?: string | null;
   doctor_confirmed_at?: string | null;

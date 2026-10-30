@@ -1,7 +1,8 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   BarChart3,
   Bell,
   Calendar,
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { language, setLanguage, isHindi } = useLanguage();
   const role = user?.role || 'admin';
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Pending appointment requests counter for hepatologists
   const [pendingDoctorRequestsCount, setPendingDoctorRequestsCount] = React.useState<number>(0);
@@ -336,6 +338,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         icon: <ShieldCheck className="w-5 h-5 shrink-0" />,
         href: '/admin?tab=audit',
       },
+      {
+        title: 'System Settings',
+        hindi: 'सिस्टम सेटिंग्स',
+        icon: <Settings className="w-5 h-5 shrink-0" />,
+        href: '/settings',
+      },
     ];
 
     const adminContent = (
@@ -377,8 +385,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const isTreatmentsActive = item.href === '/admin?tab=treatments' && location.search.includes('tab=treatments');
             const isAnalyticsActive = item.href === '/admin?tab=analytics' && (location.search.includes('tab=analytics') || location.pathname.startsWith('/analytics'));
             const isAuditActive = item.href === '/admin?tab=audit' && (location.search.includes('tab=audit') || location.pathname.startsWith('/logs'));
+            const isSettingsActive = item.href === '/settings' && (location.pathname.startsWith('/settings') || (location.pathname === '/admin' && location.search.includes('tab=settings')));
 
-            const isCurrentActive = isOverviewActive || isUsersActive || isPatientsActive || isTreatmentsActive || isAnalyticsActive || isAuditActive;
+            const isCurrentActive = isOverviewActive || isUsersActive || isPatientsActive || isTreatmentsActive || isAnalyticsActive || isAuditActive || isSettingsActive;
 
             return (
               <NavLink
@@ -388,12 +397,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={cn(
                   'flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm transition-all duration-150 group relative font-semibold',
                   isCurrentActive
-                    ? 'bg-gradient-to-r from-[#1877F2] to-[#2B9BFF] text-white shadow-md shadow-blue-500/25'
+                    ? 'bg-[#1877F2] text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-blue-50/50'
                 )}
                 title={isCollapsed ? item.title : undefined}
               >
-                <span className={isCurrentActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-600'}>
+                <span className={isCurrentActive ? 'text-white' : 'text-slate-400 group-hover:text-[#1877F2]'}>
                   {item.icon}
                 </span>
                 {!isCollapsed && (
@@ -426,27 +435,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Admin Profile Footer */}
-        {!isCollapsed && (
-          <div className="p-3 border-t border-slate-100 bg-white">
-            <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 border border-blue-200 shadow-xs">
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'AD'}
+        {/* Promo Card & Admin Profile Footer */}
+        <div className="p-3 border-t border-slate-100 space-y-3">
+          {/* Promo Card matching reference screenshot */}
+          {!isCollapsed && (
+            <div className="bg-gradient-to-br from-emerald-50/70 via-teal-50/50 to-blue-50/60 border border-emerald-100/70 rounded-2xl p-3 text-center relative overflow-hidden shadow-xs">
+              <div className="w-16 h-16 mx-auto mb-1 flex items-center justify-center">
+                <img
+                  src="/assets/healthy_liver_organ.jpg"
+                  alt="Liver Health"
+                  className="w-14 h-14 object-contain rounded-full shadow-xs bg-white/80 p-0.5"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-extrabold text-slate-900 truncate">
-                  {user?.name && !user.name.toLowerCase().includes('demo') ? user.name : 'Admin User'}
-                </p>
-                <p className="text-xs text-slate-500 font-medium">
-                  {isHindi ? 'प्रशासक' : 'Administrator'}
-                </p>
-                <p className="text-xs text-[#1877F2] font-mono font-bold truncate">
-                  ADM-001
-                </p>
+              <p className="text-xs font-semibold text-slate-800 leading-snug px-1 whitespace-pre-line">
+                {isHindi ? 'बेहतर डेटा।\nबेहतर निर्णय।\nस्वस्थ जीवन।' : 'Better data.\nBetter decisions.\nHealthier lives.'}
+              </p>
+              <div className="mt-2 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate('/admin');
+                  }}
+                  className="w-6 h-6 rounded-full bg-[#1877F2] text-white flex items-center justify-center hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                  title="CirrhoCare AI"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
+          )}
+
+          {/* Admin Profile Footer matching reference screenshot */}
+          <div className={cn(
+            'flex items-center gap-3 p-2 rounded-xl transition',
+            isCollapsed ? 'justify-center' : 'bg-slate-50/80 border border-slate-100'
+          )}>
+            <div className="w-9 h-9 rounded-full bg-[#6366F1] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              SA
+            </div>
+            {!isCollapsed && (
+              <div className="overflow-hidden flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {user?.name && !user.name.toLowerCase().includes('demo') && !user.name.toLowerCase().includes('admin user') ? user.name : 'System Admin'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span className="truncate">{isHindi ? 'प्रशासक' : 'Administrator'}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-blue-600">ADM-001</span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
 
@@ -493,124 +538,211 @@ export const Sidebar: React.FC<SidebarProps> = ({
         title: isHindi ? 'डैशबोर्ड' : 'Dashboard',
         icon: <LayoutDashboard className="w-5 h-5 shrink-0" />,
         href: '/doctor',
+        action: 'dashboard',
       },
       {
         title: isHindi ? 'मरीज़' : 'Patients',
         icon: <Users className="w-5 h-5 shrink-0" />,
-        href: '/patients',
+        href: '/doctor?tab=patients',
+        action: 'patients',
       },
       {
         title: isHindi ? 'अपॉइंटमेंट अनुरोध' : 'Appointment Requests',
         icon: <CalendarClock className="w-5 h-5 shrink-0" />,
         href: '/doctor/appointments',
+        action: 'appointments',
         badge: pendingDoctorRequestsCount,
+      },
+      {
+        title: isHindi ? 'दवाइयां' : 'Prescriptions',
+        icon: <ClipboardList className="w-5 h-5 shrink-0" />,
+        href: '/doctor?tab=prescriptions',
+        action: 'prescriptions',
+      },
+      {
+        title: isHindi ? 'रिपोर्ट्स' : 'Reports',
+        icon: <FileText className="w-5 h-5 shrink-0" />,
+        href: '/doctor?tab=reports',
+        action: 'reports',
       },
       {
         title: isHindi ? 'मेरी प्रोफ़ाइल' : 'My Profile',
         icon: <User className="w-5 h-5 shrink-0" />,
         href: '/settings',
+        action: 'profile',
       },
     ];
 
     const hepatologistContent = (
-      <div className="flex flex-col h-full bg-white text-slate-700 border-r border-slate-100 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
-        {/* Brand Header */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white shadow-xs shrink-0">
-              <HeartPulse className="w-5 h-5 text-white" />
+      <div className="flex flex-col h-full bg-white text-slate-700 border-r border-slate-100 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] justify-between">
+        <div>
+          {/* Brand Header */}
+          <div className="flex items-center justify-between px-5 py-5 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white shadow-xs shrink-0">
+                <HeartPulse className="w-5 h-5 text-white" />
+              </div>
+              {!isCollapsed && (
+                <div className="overflow-hidden">
+                  <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
+                    CirrhoCare AI
+                  </h1>
+                  <p className="text-xs text-slate-400 font-medium">{isHindi ? 'लिवर केयर प्रबंधन' : 'Liver Care Management'}</p>
+                </div>
+              )}
+            </div>
+            {/* Desktop Collapse Button */}
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden md:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Navigation Links */}
+          <div className="py-4 px-3 space-y-1.5 custom-scrollbar">
+            {hepatologistNavList.map((item, idx) => {
+              const isDashboard = item.action === 'dashboard';
+              const isPatients = item.action === 'patients';
+              const isAppointments = item.action === 'appointments';
+              const isPrescriptions = item.action === 'prescriptions';
+              const isReports = item.action === 'reports';
+              const isProfile = item.action === 'profile';
+
+              const isCurrentActive = isDashboard
+                ? (location.pathname === '/doctor' || location.pathname === '/') && (!location.search || location.search === '' || location.search === '?tab=overview')
+                : isPatients
+                ? (location.pathname === '/doctor' && location.search.includes('tab=patients')) || location.pathname.startsWith('/patients')
+                : isAppointments
+                ? location.pathname.startsWith('/doctor/appointments') || location.pathname === '/appointments'
+                : isPrescriptions
+                ? (location.pathname === '/doctor' && location.search.includes('tab=prescriptions')) || location.pathname.startsWith('/prescriptions')
+                : isReports
+                ? (location.pathname === '/doctor' && location.search.includes('tab=reports')) || location.pathname.startsWith('/reports')
+                : isProfile
+                ? location.pathname.startsWith('/settings')
+                : false;
+
+              return (
+                <NavLink
+                  key={`${item.title}-${idx}`}
+                  to={item.href}
+                  onClick={() => {
+                    onMobileClose();
+                    if (item.action && location.pathname === '/doctor') {
+                      window.dispatchEvent(new CustomEvent('doctor:action', { detail: item.action }));
+                    }
+                  }}
+                  className={cn(
+                    'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-medium relative',
+                    isCurrentActive
+                      ? 'bg-[#1877F2] text-white shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-blue-50/50'
+                  )}
+                  title={isCollapsed ? (item.badge ? `${item.title} (${item.badge} pending)` : item.title) : undefined}
+                >
+                  <span className={isCurrentActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-600'}>
+                    {item.icon}
+                  </span>
+                  {!isCollapsed && (
+                    <span className="truncate leading-tight">
+                      {item.title}
+                    </span>
+                  )}
+                  {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                    <span
+                      className={cn(
+                        'ml-auto px-2 py-0.5 rounded-full text-xs font-bold shrink-0 transition-colors',
+                        isCurrentActive ? 'bg-white text-[#1877F2]' : 'bg-blue-100 text-[#1877F2]'
+                      )}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                  {isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                    <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#1877F2]" />
+                  )}
+                </NavLink>
+              );
+            })}
+
+            {/* Logout Navigation Item */}
+            <button
+              type="button"
+              onClick={() => {
+                onMobileClose();
+                logout();
+              }}
+              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 w-full text-left cursor-pointer"
+              title={isCollapsed ? (isHindi ? 'लॉग आउट' : 'Logout') : undefined}
+            >
+              <LogOut className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-rose-600" />
+              {!isCollapsed && (
+                <span className="truncate leading-tight">{isHindi ? 'लॉग आउट' : 'Logout'}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Section: Promo Card & Profile pill */}
+        <div className="p-3 border-t border-slate-100 space-y-3">
+          {/* Promo Card matching reference specification */}
+          {!isCollapsed && (
+            <div className="bg-gradient-to-br from-emerald-50/70 via-teal-50/50 to-blue-50/60 border border-emerald-100/70 rounded-2xl p-3 text-center relative overflow-hidden shadow-xs">
+              <div className="w-16 h-16 mx-auto mb-1.5 flex items-center justify-center">
+                <img
+                  src="/assets/healthy_liver_organ.jpg"
+                  alt="Liver Health"
+                  className="w-14 h-14 object-contain rounded-full shadow-xs bg-white/80 p-0.5"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+              <p className="text-xs font-semibold text-slate-800 leading-snug px-1">
+                {isHindi ? 'शीघ्र पहचान। बेहतर उपचार। स्वस्थ कल।' : 'Early detection. Better treatment. Healthier tomorrows.'}
+              </p>
+              <div className="mt-2 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('doctor:action', { detail: 'overview' }));
+                  }}
+                  className="w-6 h-6 rounded-full bg-[#1877F2] text-white flex items-center justify-center hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                  title="Liver Care Management"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Doctor User Card */}
+          <div className={cn(
+            'flex items-center gap-3 p-2 rounded-xl transition',
+            isCollapsed ? 'justify-center' : 'bg-slate-50/80 border border-slate-100'
+          )}>
+            <div className="w-9 h-9 rounded-full bg-[#1877F2] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              DR
             </div>
             {!isCollapsed && (
-              <div className="overflow-hidden">
-                <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
-                  CirrhoCare AI
-                </h1>
-                <p className="text-xs text-slate-400 font-medium">{isHindi ? 'लिवर केयर प्रबंधन' : 'Liver Care Management'}</p>
+              <div className="overflow-hidden flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {user?.name && !user.name.toLowerCase().includes('demo') ? user.name : 'Dr. Raj Sharma'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span className="truncate">{isHindi ? 'हेपेटोलॉजिस्ट' : 'Hepatologist'}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-blue-600">HEP-001</span>
+                </div>
               </div>
             )}
           </div>
-          {/* Desktop Collapse Button */}
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="hidden md:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
-        </div>
-
-        {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1.5 custom-scrollbar">
-          {hepatologistNavList.map((item, idx) => {
-            const isDashboard = item.href === '/doctor';
-            const isPatients = item.href === '/patients';
-            const isAppointments = item.href === '/doctor/appointments' || item.href === '/appointments';
-            const isProfile = item.href === '/settings';
-
-            const isActive = isDashboard
-              ? location.pathname === '/doctor' || location.pathname === '/'
-              : isPatients
-              ? location.pathname.startsWith('/patients')
-              : isAppointments
-              ? location.pathname.startsWith('/doctor/appointments') || location.pathname === '/appointments'
-              : isProfile
-              ? location.pathname.startsWith('/settings')
-              : false;
-
-            return (
-              <NavLink
-                key={`${item.title}-${idx}`}
-                to={item.href}
-                onClick={onMobileClose}
-                className={cn(
-                  'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-semibold relative',
-                  isActive
-                    ? 'bg-[#eaf3fe] text-[#1877F2]'
-                    : 'text-slate-700 hover:text-blue-600 hover:bg-slate-50'
-                )}
-                title={isCollapsed ? (item.badge ? `${item.title} (${item.badge} pending)` : item.title) : undefined}
-              >
-                <span className={isActive ? 'text-[#1877F2]' : 'text-slate-500 group-hover:text-blue-600'}>
-                  {item.icon}
-                </span>
-                {!isCollapsed && (
-                  <span className="truncate leading-tight">
-                    {item.title}
-                  </span>
-                )}
-                {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                  <span
-                    className={cn(
-                      'ml-auto px-2 py-0.5 rounded-full text-xs font-bold shrink-0 transition-colors',
-                      isActive ? 'bg-[#1877F2] text-white' : 'bg-blue-100 text-[#1877F2]'
-                    )}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-                {isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#1877F2]" />
-                )}
-              </NavLink>
-            );
-          })}
-
-          {/* Logout Navigation Item */}
-          <button
-            type="button"
-            onClick={() => {
-              onMobileClose();
-              logout();
-            }}
-            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-semibold text-slate-700 hover:text-rose-600 hover:bg-rose-50 w-full text-left cursor-pointer"
-            title={isCollapsed ? (isHindi ? 'लॉग आउट' : 'Logout') : undefined}
-          >
-            <LogOut className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-rose-600" />
-            {!isCollapsed && (
-              <span className="truncate leading-tight">{isHindi ? 'लॉग आउट' : 'Logout'}</span>
-            )}
-          </button>
         </div>
       </div>
     );
@@ -654,7 +786,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {
         title: 'Dashboard',
         hindi: 'डैशबोर्ड',
-        icon: <Home className="w-5 h-5 shrink-0" />,
+        icon: <LayoutDashboard className="w-5 h-5 shrink-0" />,
         href: '/patient',
       },
       {
@@ -670,10 +802,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         href: '/prescriptions',
       },
       {
-        title: 'Appointments',
-        hindi: 'अपॉइंटमेंट्स',
+        title: 'My Appointments',
+        hindi: 'मेरी अपॉइंटमेंट्स',
         icon: <Calendar className="w-5 h-5 shrink-0" />,
         href: '/appointments',
+      },
+      {
+        title: 'Health Guidance',
+        hindi: 'स्वास्थ्य मार्गदर्शन',
+        icon: <Sparkles className="w-5 h-5 shrink-0" />,
+        href: '/patient?tab=guidance',
+      },
+      {
+        title: 'My Profile',
+        hindi: 'मेरी प्रोफ़ाइल',
+        icon: <User className="w-5 h-5 shrink-0" />,
+        href: '/settings',
       },
     ];
 
@@ -689,15 +833,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-tight">
                 CirrhoCare <span className="text-[#1877F2]">AI</span>
               </h1>
-              <p className="text-xs text-slate-400 font-medium">Liver Care Management</p>
+              <p className="text-xs text-slate-400 font-medium">Smarter Liver Health</p>
             </div>
           </div>
         </div>
 
-        {/* Navigation Links (Only 5 items: Dashboard, My Reports, My Prescriptions, Appointments, Logout) */}
+        {/* Navigation Links (Dashboard, My Reports, My Prescriptions, My Appointments, Health Guidance, My Profile, Logout) */}
         <div className="flex-1 overflow-y-auto py-3 px-3 space-y-1 custom-scrollbar">
           {patientNavList.map((item) => {
-            const active = location.pathname === item.href;
+            const active =
+              item.href === '/patient'
+                ? location.pathname === '/patient' && !location.search.includes('tab=guidance')
+                : item.href.includes('tab=guidance')
+                ? location.search.includes('tab=guidance')
+                : location.pathname === item.href;
+
             return (
               <NavLink
                 key={item.href}
@@ -706,12 +856,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={cn(
                   'flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm transition-all duration-150 group relative font-semibold',
                   active
-                    ? 'bg-[#EBF3FF] text-[#1877F2]'
+                    ? 'bg-[#1877F2] text-white font-bold shadow-sm shadow-blue-500/20'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 )}
                 title={isCollapsed ? item.title : undefined}
               >
-                <span className={active ? 'text-[#1877F2]' : 'text-slate-500 group-hover:text-slate-700'}>
+                <span className={active ? 'text-white' : 'text-slate-500 group-hover:text-slate-700'}>
                   {item.icon}
                 </span>
                 <div className="flex flex-col min-w-0">
@@ -723,7 +873,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
-          {/* 5. Logout item in red */}
+          {/* 7. Logout item in red */}
           <div className="pt-2">
             <button
               type="button"
@@ -739,6 +889,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="truncate leading-tight">{isHindi ? 'लॉग आउट' : 'Logout'}</span>
               </div>
             </button>
+          </div>
+        </div>
+
+        {/* Bottom Meditation Wellness Card matching reference screenshot */}
+        <div className="p-3 mt-auto">
+          <div className="bg-[#EBF7F2] border border-[#CDEFE0] rounded-2xl p-3.5 flex flex-col items-center text-center shadow-xs">
+            <div className="w-24 h-20 mb-2 flex items-center justify-center">
+              <img
+                src="/assets/patient_meditation_wellness.png"
+                alt="Wellness Meditation"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="flex items-center justify-between w-full mt-1">
+              <p className="text-xs font-bold text-slate-800 leading-snug text-left flex-1">
+                {isHindi ? 'स्वस्थ कल के लिए आज छोटे कदम।' : 'Small steps today for a healthier tomorrow.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  onMobileClose();
+                  navigate('/patient?tab=guidance');
+                }}
+                className="w-7 h-7 rounded-full bg-[#E0F2FE] hover:bg-[#BAE6FD] text-[#0284C7] flex items-center justify-center shrink-0 ml-2 transition cursor-pointer"
+                title={isHindi ? 'स्वास्थ्य मार्गदर्शन' : 'Health Guidance'}
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -784,102 +963,185 @@ export const Sidebar: React.FC<SidebarProps> = ({
         title: isHindi ? 'डैशबोर्ड' : 'Dashboard',
         icon: <LayoutDashboard className="w-5 h-5 shrink-0" />,
         href: '/lab',
+        action: 'dashboard',
       },
       {
         title: isHindi ? 'मरीज़' : 'Patients',
         icon: <Users className="w-5 h-5 shrink-0" />,
-        href: '/patients',
+        href: '/lab?tab=patients',
+        action: 'patients',
+      },
+      {
+        title: isHindi ? 'टेस्ट परिणाम दर्ज करें' : 'Enter Test Results',
+        icon: <FlaskConical className="w-5 h-5 shrink-0" />,
+        href: '/lab?action=enter-results',
+        action: 'enter-results',
+      },
+      {
+        title: isHindi ? 'रिपोर्ट्स अपलोड करें' : 'Upload Reports',
+        icon: <UploadCloud className="w-5 h-5 shrink-0" />,
+        href: '/lab?action=upload-report',
+        action: 'upload-report',
+      },
+      {
+        title: isHindi ? 'रिपोर्ट्स' : 'Reports',
+        icon: <FileText className="w-5 h-5 shrink-0" />,
+        href: '/lab?tab=reports',
+        action: 'reports',
       },
       {
         title: isHindi ? 'मेरी प्रोफ़ाइल' : 'My Profile',
         icon: <User className="w-5 h-5 shrink-0" />,
         href: '/settings',
+        action: 'profile',
       },
     ];
 
     const labTechContent = (
-      <div className="flex flex-col h-full bg-white text-slate-700 border-r border-slate-100 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
-        {/* Brand Header */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white shadow-xs shrink-0">
-              <HeartPulse className="w-5 h-5 text-white" />
+      <div className="flex flex-col h-full bg-white text-slate-700 border-r border-slate-100 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] justify-between">
+        <div>
+          {/* Brand Header */}
+          <div className="flex items-center justify-between px-5 py-5 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white shadow-xs shrink-0">
+                <HeartPulse className="w-5 h-5 text-white" />
+              </div>
+              {!isCollapsed && (
+                <div className="overflow-hidden">
+                  <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
+                    CirrhoCare AI
+                  </h1>
+                  <p className="text-xs text-slate-400 font-medium">{isHindi ? 'लिवर केयर प्रबंधन' : 'Liver Care Management'}</p>
+                </div>
+              )}
+            </div>
+            {/* Desktop Collapse Button */}
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden md:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Navigation Links */}
+          <div className="py-4 px-3 space-y-1.5 custom-scrollbar">
+            {labTechNavList.map((item, idx) => {
+              const isDashboard = item.action === 'dashboard';
+              const isProfile = item.action === 'profile';
+              const isCurrentActive = isDashboard
+                ? location.pathname === '/lab' && !location.search
+                : isProfile
+                ? location.pathname.startsWith('/settings')
+                : location.pathname === '/lab' && location.search.includes(item.action);
+
+              return (
+                <NavLink
+                  key={`${item.title}-${idx}`}
+                  to={item.href}
+                  onClick={() => {
+                    onMobileClose();
+                    if (item.action && item.action !== 'dashboard' && item.action !== 'profile') {
+                      window.dispatchEvent(new CustomEvent('labtech:action', { detail: item.action }));
+                    }
+                  }}
+                  className={cn(
+                    'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-medium',
+                    isCurrentActive
+                      ? 'bg-[#1877F2] text-white shadow-xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  )}
+                  title={isCollapsed ? item.title : undefined}
+                >
+                  <span className={isCurrentActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-800'}>
+                    {item.icon}
+                  </span>
+                  {!isCollapsed && (
+                    <span className="truncate leading-tight">
+                      {item.title}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+
+            {/* Logout Navigation Item */}
+            <button
+              type="button"
+              onClick={() => {
+                onMobileClose();
+                logout();
+              }}
+              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 w-full text-left cursor-pointer"
+              title={isCollapsed ? (isHindi ? 'लॉग आउट' : 'Logout') : undefined}
+            >
+              <LogOut className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-rose-600" />
+              {!isCollapsed && (
+                <span className="truncate leading-tight">{isHindi ? 'लॉग आउट' : 'Logout'}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Section: Promo Card & Profile pill */}
+        <div className="p-3 border-t border-slate-100 space-y-3">
+          {/* Promo Card matching reference screenshot */}
+          {!isCollapsed && (
+            <div className="bg-gradient-to-br from-emerald-50/70 via-teal-50/50 to-blue-50/60 border border-emerald-100/70 rounded-2xl p-3 text-center relative overflow-hidden shadow-xs">
+              <div className="w-16 h-16 mx-auto mb-1.5 flex items-center justify-center">
+                <img
+                  src="/assets/healthy_liver_organ.jpg"
+                  alt="Liver Health"
+                  className="w-14 h-14 object-contain rounded-full shadow-xs bg-white/80 p-0.5"
+                  onError={(e) => {
+                    // Fallback to sparkles / organ icon if image not available
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+              <p className="text-xs font-semibold text-slate-800 leading-snug px-1">
+                Accurate tests today for healthier tomorrows.
+              </p>
+              <div className="mt-2 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('labtech:action', { detail: 'enter-results' }));
+                  }}
+                  className="w-6 h-6 rounded-full bg-[#1877F2] text-white flex items-center justify-center hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                  title="Enter lab results"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Lab Technician User Card */}
+          <div className={cn(
+            'flex items-center gap-3 p-2 rounded-xl transition',
+            isCollapsed ? 'justify-center' : 'bg-slate-50/80 border border-slate-100'
+          )}>
+            <div className="w-9 h-9 rounded-full bg-[#6366F1] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              NV
             </div>
             {!isCollapsed && (
-              <div className="overflow-hidden">
-                <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">
-                  CirrhoCare AI
-                </h1>
-                <p className="text-xs text-slate-400 font-medium">{isHindi ? 'लिवर केयर प्रबंधन' : 'Liver Care Management'}</p>
+              <div className="overflow-hidden flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {user?.name || 'Neha Verma'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span className="truncate">Lab Technician</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-indigo-600">LAB-001</span>
+                </div>
               </div>
             )}
           </div>
-          {/* Desktop Collapse Button */}
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="hidden md:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
-        </div>
-
-        {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1.5 custom-scrollbar">
-          {labTechNavList.map((item, idx) => {
-            const isDashboard = item.href === '/lab';
-            const isPatients = item.href === '/patients';
-            const isProfile = item.href === '/settings';
-
-            const isActive = isDashboard
-              ? location.pathname === '/lab' || location.pathname === '/'
-              : isPatients
-              ? location.pathname.startsWith('/patients')
-              : isProfile
-              ? location.pathname.startsWith('/settings')
-              : false;
-
-            return (
-              <NavLink
-                key={`${item.title}-${idx}`}
-                to={item.href}
-                onClick={onMobileClose}
-                className={cn(
-                  'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-semibold',
-                  isActive
-                    ? 'bg-[#eaf3fe] text-[#1877F2]'
-                    : 'text-slate-700 hover:text-blue-600 hover:bg-slate-50'
-                )}
-                title={isCollapsed ? item.title : undefined}
-              >
-                <span className={isActive ? 'text-[#1877F2]' : 'text-slate-500 group-hover:text-blue-600'}>
-                  {item.icon}
-                </span>
-                {!isCollapsed && (
-                  <span className="truncate leading-tight">
-                    {item.title}
-                  </span>
-                )}
-              </NavLink>
-            );
-          })}
-
-          {/* Logout Navigation Item */}
-          <button
-            type="button"
-            onClick={() => {
-              onMobileClose();
-              logout();
-            }}
-            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 group font-semibold text-slate-700 hover:text-rose-600 hover:bg-rose-50 w-full text-left cursor-pointer"
-            title={isCollapsed ? (isHindi ? 'लॉग आउट' : 'Logout') : undefined}
-          >
-            <LogOut className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-rose-600" />
-            {!isCollapsed && (
-              <span className="truncate leading-tight">{isHindi ? 'लॉग आउट' : 'Logout'}</span>
-            )}
-          </button>
         </div>
       </div>
     );
