@@ -29,6 +29,9 @@ instance/uploads/*
 !instance/uploads/.gitkeep
 instance/demo_uploads/*
 !instance/demo_uploads/.gitkeep
+instance/backup_pdf_reports/
+instance/backups/
+instance/*.bak
 
 # Editor/system files
 .vscode/

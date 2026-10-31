@@ -263,13 +263,13 @@ export const PatientDashboardPage: React.FC = () => {
     return isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
   }, [patientRecord, isHindi]);
 
-  const activePrescriptionsCount = prescriptions.length > 0 ? prescriptions.length : 1;
-  const reportsCount = reports.length > 0 ? reports.length : (data?.reports_count ?? 1);
+  const activePrescriptionsCount = prescriptions.length > 0 ? prescriptions.length : (data?.prescriptions_count ?? 0);
+  const reportsCount = reports.length > 0 ? reports.length : (data?.reports_count ?? 0);
   const latestReportDate = useMemo(() => {
     if (reports.length > 0 && reports[0].uploaded_at) {
       return formatDateDisplay(reports[0].uploaded_at);
     }
-    return isHindi ? '30 अक्टूबर 2026' : '30 Oct 2026';
+    return isHindi ? 'कोई रिपोर्ट अपलोड नहीं' : 'No reports uploaded';
   }, [reports, isHindi]);
 
   // Biomarkers displayed in the Latest Lab Results table (matching 5 tests in reference screenshot)
@@ -635,11 +635,11 @@ export const PatientDashboardPage: React.FC = () => {
               : 'Personal Health Portal • Manage • Monitor • Live Better'}
           </div>
 
-          <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-3xl lg:text-[36px] font-extrabold text-slate-900 tracking-tight flex items-center gap-2 font-manrope leading-tight">
             {isHindi ? `वापसी पर स्वागत है, ${patientName}!` : `Welcome back, ${patientName}!`} <span className="text-[#1877F2]">💙</span>
           </h2>
 
-          <p className="text-xs lg:text-sm text-slate-600 font-normal leading-relaxed">
+          <p className="text-sm sm:text-base text-slate-600 font-normal leading-relaxed">
             {isHindi
               ? 'आपकी स्वास्थ्य यात्रा महत्वपूर्ण है। अपनी रिपोर्ट्स, पर्चे, अपॉइंटमेंट्स और व्यक्तिगत मार्गदर्शन — सब एक ही स्थान पर देखें।'
               : 'Your health journey matters. View your reports, prescriptions, appointments, and personalized guidance — all in one place.'}
@@ -654,9 +654,9 @@ export const PatientDashboardPage: React.FC = () => {
         {/* Center: Sofa Lifestyle Photo matching reference */}
         <div className="hidden md:flex items-center justify-center shrink-0">
           <img
-            src="/assets/patient_welcome_hero.jpg"
+            src="/assets/patient_hero_lifestyle_center.png"
             alt="Healthier Choices Brighter Tomorrows"
-            className="h-36 lg:h-40 w-auto object-contain rounded-2xl shadow-xs border border-white/60"
+            className="h-36 lg:h-44 w-auto object-contain rounded-2xl shadow-xs border border-white/60"
           />
         </div>
 
@@ -737,7 +737,7 @@ export const PatientDashboardPage: React.FC = () => {
                   ? (isHindi
                       ? `${reportsCount} रिपोर्ट उपलब्ध`
                       : `${reportsCount} ${reportsCount === 1 ? 'report available' : 'reports available'}`)
-                  : (isHindi ? '1 रिपोर्ट उपलब्ध' : '1 report available')}
+                  : (isHindi ? '0 रिपोर्ट उपलब्ध' : '0 reports available')}
               </p>
               <p className="text-xs text-slate-400 mt-2 font-medium">
                 {isHindi ? 'अंतिम रिपोर्ट:' : 'Last report:'} {latestReportDate}
@@ -769,13 +769,19 @@ export const PatientDashboardPage: React.FC = () => {
             </div>
             <div className="mt-1">
               <p className="text-base font-extrabold text-slate-900 leading-tight">
-                {activePrescriptionsCount}{' '}
-                {isHindi
-                  ? (activePrescriptionsCount === 1 ? 'सक्रिय पर्चा' : 'सक्रिय पर्चे')
-                  : (activePrescriptionsCount === 1 ? 'active prescription' : 'active prescriptions')}
+                {activePrescriptionsCount > 0
+                  ? `${activePrescriptionsCount} ${
+                      isHindi
+                        ? activePrescriptionsCount === 1 ? 'सक्रिय पर्चा' : 'सक्रिय पर्चे'
+                        : activePrescriptionsCount === 1 ? 'active prescription' : 'active prescriptions'
+                    }`
+                  : (isHindi ? '0 सक्रिय पर्चे' : '0 active prescriptions')}
               </p>
               <p className="text-xs text-slate-400 mt-2 font-medium">
-                {isHindi ? 'अंतिम निर्धारण:' : 'Last prescribed:'} 28 Oct 2026
+                {isHindi ? 'अंतिम निर्धारण:' : 'Last prescribed:'}{' '}
+                {prescriptions.length > 0 && prescriptions[0].created_at
+                  ? formatDateDisplay(prescriptions[0].created_at)
+                  : (isHindi ? 'कोई पर्चा नहीं' : 'No prescriptions yet')}
               </p>
             </div>
           </div>
@@ -958,9 +964,9 @@ export const PatientDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="shrink-0 w-36 sm:w-40 flex items-center justify-center">
+            <div className="shrink-0 w-36 sm:w-44 flex items-center justify-center">
               <img
-                src="/assets/lifestyle_healthy_diet.jpg"
+                src="/assets/patient_healthy_habits_advice.png"
                 alt="Healthy Habits Happier Days"
                 className="w-full h-auto object-cover rounded-2xl border border-slate-100 shadow-2xs"
               />
@@ -994,107 +1000,65 @@ export const PatientDashboardPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {/* Report Row 1: Liver Function Test (LFT) */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 hover:bg-slate-50/70 transition">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
-                  <FileText className="w-5 h-5 text-[#1877F2]" />
-                </div>
-                <div>
-                  <h4 className="text-xs md:text-sm font-bold text-slate-900">
-                    {reports.length > 0 && reports[0].original_filename
-                      ? reports[0].original_filename
-                      : (isHindi ? 'यकृत कार्य परीक्षण (LFT)' : 'Liver Function Test (LFT)')}
-                  </h4>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {reports.length > 0 && reports[0].uploaded_at
-                      ? formatDateDisplay(reports[0].uploaded_at)
-                      : '30 Oct 2026'}
-                  </p>
-                </div>
+            {reports.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs">
+                <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-700">
+                  {isHindi ? 'अभी तक कोई प्रयोगशाला रिपोर्ट अपलोड नहीं की गई है।' : 'No laboratory reports have been uploaded yet.'}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {isHindi ? 'लैब परीक्षण के बाद आपकी मेडिकल रिपोर्ट यहां दिखाई देंगी।' : 'Your medical reports will appear here once uploaded by the clinical lab.'}
+                </p>
               </div>
+            ) : (
+              reports.slice(0, 2).map((r) => (
+                <div key={r.id} className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 hover:bg-slate-50/70 transition">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
+                      <FileText className="w-5 h-5 text-[#1877F2]" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs md:text-sm font-bold text-slate-900">
+                        {r.original_filename || r.filename}
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                        {r.uploaded_at ? formatDateDisplay(r.uploaded_at) : ''}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#E8F8F0] text-[#059669]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
-                  {isHindi ? 'सामान्य' : 'Normal'}
-                </span>
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold',
+                      r.is_reviewed ? 'bg-[#E8F8F0] text-[#059669]' : 'bg-[#FEF3C7] text-[#D97706]'
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', r.is_reviewed ? 'bg-[#059669]' : 'bg-[#D97706]')}></span>
+                      {r.is_reviewed ? (isHindi ? 'समीक्षित' : 'Reviewed') : (isHindi ? 'समीक्षा प्रतीक्षित' : 'Awaiting Review')}
+                    </span>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (reports.length > 0) {
-                      setSelectedReport(reports[0]);
-                    }
-                    setIsReportsModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1877F2] text-[#1877F2] hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#1877F2]" />
-                  <span>{isHindi ? 'पीडीएफ देखें' : 'View PDF'}</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedReport(r);
+                        setIsReportsModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1877F2] text-[#1877F2] hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-[#1877F2]" />
+                      <span>{isHindi ? 'पीडीएफ देखें' : 'View PDF'}</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsReportsModalOpen(true)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Report Row 2: Complete Blood Count (CBC) */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 hover:bg-slate-50/70 transition">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0 border border-blue-100">
-                  <FileText className="w-5 h-5 text-[#1877F2]" />
+                    <button
+                      type="button"
+                      onClick={() => setIsReportsModalOpen(true)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs md:text-sm font-bold text-slate-900">
-                    {reports.length > 1 && reports[1].original_filename
-                      ? reports[1].original_filename
-                      : (isHindi ? 'पूर्ण रक्त गणना (CBC)' : 'Complete Blood Count (CBC)')}
-                  </h4>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {reports.length > 1 && reports[1].uploaded_at
-                      ? formatDateDisplay(reports[1].uploaded_at)
-                      : '12 Sep 2026'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF3C7] text-[#D97706]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#D97706]"></span>
-                  {isHindi ? 'मामूली असामान्यता' : 'Mild Abnormality'}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (reports.length > 1) {
-                      setSelectedReport(reports[1]);
-                    } else if (reports.length > 0) {
-                      setSelectedReport(reports[0]);
-                    }
-                    setIsReportsModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1877F2] text-[#1877F2] hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#1877F2]" />
-                  <span>{isHindi ? 'पीडीएफ देखें' : 'View PDF'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsReportsModalOpen(true)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+              ))
+            )}
           </div>
         </div>
 

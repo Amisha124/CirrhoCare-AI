@@ -1,11 +1,17 @@
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
+import secrets
+from urllib.parse import urlencode
 from uuid import uuid4
 
+import requests
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 
-from flask import Blueprint, abort, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, Response, abort, current_app, jsonify, redirect, request, send_from_directory, session
 from flask_login import current_user, login_required, login_user, logout_user
+from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
 from config import Config
@@ -128,6 +134,29 @@ def apply_date_range_filter(query, date_column, start_date_str, end_date_str):
     if end_dt:
         query = query.filter(date_column <= end_dt)
     return query
+
+
+def get_patient_eager_options(include_relations=False):
+    """
+    Returns eager loading options for Patient queries to eliminate N+1 queries.
+    Crucial for remote PostgreSQL (Supabase) where serialized relationships
+    trigger multiple remote round-trips.
+    """
+    opts = [
+        joinedload(Patient.assigned_doctor),
+        joinedload(Patient.created_by),
+        joinedload(Patient.treatment_completed_by),
+        selectinload(Patient.reports).joinedload(Report.reviewed_by),
+        selectinload(Patient.reports).joinedload(Report.lab_order),
+        selectinload(Patient.prescriptions).joinedload(Prescription.doctor),
+        selectinload(Patient.lab_orders),
+    ]
+    if include_relations:
+        opts.extend([
+            selectinload(Patient.predictions),
+            selectinload(Patient.appointments),
+        ])
+    return opts
 
 
 # -----------------------------------------------------------------------------
@@ -498,6 +527,203 @@ def api_auth_register():
     }, status_code=201)
 
 
+# -----------------------------------------------------------------------------
+# Google OAuth 2.0 Authentication
+# -----------------------------------------------------------------------------
+@api_bp.get("/auth/oauth-status")
+def auth_oauth_status():
+    """
+    Checks if Google OAuth 2.0 is configured without exposing secrets.
+    """
+    client_id = (current_app.config.get("GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID") or "").strip()
+    client_secret = (current_app.config.get("GOOGLE_CLIENT_SECRET") or os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
+    google_configured = bool(client_id and client_secret and not client_id.startswith("your_"))
+    return json_success({
+        "google_enabled": google_configured,
+        "google_client_id": client_id if google_configured else None,
+    })
+
+
+@api_bp.get("/auth/google")
+def auth_google():
+    """
+    Initiates Google OAuth 2.0 flow. Generates a secure CSRF state token and
+    redirects to Google's consent screen.
+    """
+    client_id = (current_app.config.get("GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID") or "").strip()
+    client_secret = (current_app.config.get("GOOGLE_CLIENT_SECRET") or os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
+    if not client_id or not client_secret or client_id.startswith("your_"):
+        if request.is_json or request.headers.get("Accept") == "application/json":
+            return json_error("Google OAuth is not configured on this server.", 501)
+        return redirect("/login?error=oauth_not_configured")
+
+    # Generate secure CSRF state
+    state = secrets.token_urlsafe(32)
+    session["oauth_state"] = state
+
+    # Resolve callback URL
+    redirect_uri = (current_app.config.get("GOOGLE_REDIRECT_URI") or os.getenv("GOOGLE_REDIRECT_URI") or "").strip()
+    if not redirect_uri:
+        # Dynamically build callback URL matching the request host
+        redirect_uri = request.host_url.rstrip("/") + "/api/auth/google/callback"
+    session["oauth_redirect_uri"] = redirect_uri
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    }
+    google_auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+
+    if request.is_json or request.headers.get("Accept") == "application/json":
+        return json_success({"auth_url": google_auth_url})
+
+    return redirect(google_auth_url)
+
+
+@api_bp.get("/auth/google/callback")
+def auth_google_callback():
+    """
+    Handles Google OAuth 2.0 callback, verifies CSRF state token,
+    exchanges code for tokens, retrieves Google profile, links/provisions
+    least-privilege user account, and logs in the user via Flask-Login.
+    """
+    # 1. Handle error response from Google (e.g. user cancelled)
+    err = request.args.get("error")
+    if err:
+        log_activity("Google OAuth Cancelled", f"OAuth returned error: {err}")
+        return redirect("/login?error=oauth_cancelled")
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+    saved_state = session.pop("oauth_state", None)
+    saved_redirect_uri = session.pop("oauth_redirect_uri", None)
+
+    if not code:
+        return redirect("/login?error=oauth_missing_code")
+
+    if not state or not saved_state or state != saved_state:
+        current_app.logger.warning("Google OAuth state validation mismatch: got %s, expected %s", state, saved_state)
+        return redirect("/login?error=oauth_state_invalid")
+
+    client_id = (current_app.config.get("GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID") or "").strip()
+    client_secret = (current_app.config.get("GOOGLE_CLIENT_SECRET") or os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
+    redirect_uri = (
+        saved_redirect_uri
+        or current_app.config.get("GOOGLE_REDIRECT_URI")
+        or os.getenv("GOOGLE_REDIRECT_URI")
+        or (request.host_url.rstrip("/") + "/api/auth/google/callback")
+    ).strip()
+
+    # 2. Exchange authorization code for access token
+    try:
+        token_resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id.strip(),
+                "client_secret": client_secret.strip(),
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        if not token_resp.ok:
+            current_app.logger.error("OAuth token exchange failed (%s): %s", token_resp.status_code, token_resp.text)
+            return redirect("/login?error=oauth_token_failed")
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            return redirect("/login?error=oauth_token_failed")
+    except Exception as exc:
+        current_app.logger.error("OAuth token request exception: %s", exc)
+        return redirect("/login?error=oauth_token_failed")
+
+    # 3. Retrieve user profile from Google UserInfo endpoint
+    try:
+        userinfo_resp = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            timeout=10,
+        )
+        if not userinfo_resp.ok:
+            current_app.logger.error("OAuth userinfo failed (%s): %s", userinfo_resp.status_code, userinfo_resp.text)
+            return redirect("/login?error=oauth_userinfo_failed")
+        userinfo = userinfo_resp.json()
+    except Exception as exc:
+        current_app.logger.error("OAuth userinfo exception: %s", exc)
+        return redirect("/login?error=oauth_userinfo_failed")
+
+    email = str(userinfo.get("email") or "").strip().lower()
+    name = str(userinfo.get("name") or "").strip()
+    email_verified = userinfo.get("email_verified", True)
+
+    if not email:
+        return redirect("/login?error=oauth_no_email")
+
+    if not email_verified:
+        return redirect("/login?error=oauth_email_unverified")
+
+    # 4. Find existing user or provision a new account with least privilege role ('patient')
+    user = User.query.filter_by(email=email).first()
+    if user:
+        if not user.active:
+            return redirect("/login?error=account_deactivated")
+        if user.is_locked:
+            return redirect("/login?error=account_locked")
+        user.reset_failed_attempts()
+        db.session.commit()
+        login_user(user, remember=True)
+        log_activity("Google OAuth Login", f"{user.email} signed in via Google OAuth")
+    else:
+        portal_id = generate_patient_portal_id()
+        while User.query.filter_by(portal_id=portal_id).first():
+            portal_id = generate_patient_portal_id()
+
+        user = User(
+            name=name or email.split("@")[0].replace(".", " ").title(),
+            email=email,
+            portal_id=portal_id,
+            role="patient",
+            active=True,
+            password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+        )
+        db.session.add(user)
+
+        # Synchronize patient record - STRICTLY by portal_id (never silently hijack existing clinical records by email alone)
+        existing_patient = Patient.query.filter_by(portal_id=portal_id).first()
+        if not existing_patient:
+            new_patient = Patient(
+                full_name=name or user.name,
+                portal_id=portal_id,
+                email=email,
+                age=40,
+                gender="Other",
+                treatment_status="Pending Verification",
+                lab_workflow_status="Pending Intake",
+                created_by_id=None,
+            )
+            db.session.add(new_patient)
+
+        db.session.commit()
+        login_user(user, remember=True)
+        log_activity("Google OAuth Registration", f"New patient registered via Google OAuth: {user.email} ({portal_id})")
+
+    role_redirects = {
+        "admin": "/admin",
+        "hepatologist": "/doctor",
+        "labtech": "/lab",
+        "patient": "/patient",
+    }
+    target_url = role_redirects.get(user.role, "/dashboard")
+    return redirect(target_url)
+
+
 @api_bp.get("/doctors")
 @login_required
 def get_doctors():
@@ -575,12 +801,21 @@ def dashboard_stats():
             "65+": sum(1 for p in all_patients if p.age is not None and p.age >= 65),
         }
 
+        raw_recent_logs = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(40).all()
+        filtered_clinical_logs = [
+            l for l in raw_recent_logs
+            if not any(noise in (l.action or "").lower() for noise in ["login", "logout", "auth", "token", "password", "pin", "session"])
+            and not any(noise in (l.details or "").lower() for noise in ["signed in", "logged out", "bearer", "session authenticated"])
+        ][:8]
+        if not filtered_clinical_logs:
+            filtered_clinical_logs = raw_recent_logs[:8]
+
         recent_logs = [
             {"id": l.id, "action": l.action, "details": l.details, "user_email": l.user.email if l.user else "System", "created_at": l.created_at.isoformat()}
-            for l in ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(8).all()
+            for l in filtered_clinical_logs
         ]
         recent_patients = [
-            serialize_patient(p) for p in Patient.query.order_by(Patient.created_at.desc()).limit(6).all()
+            serialize_patient(p) for p in Patient.query.options(*get_patient_eager_options()).order_by(Patient.created_at.desc()).limit(6).all()
         ]
 
         doctors_count = User.query.filter_by(role="hepatologist").count()
@@ -731,7 +966,7 @@ def dashboard_stats():
         recent_activities = recent_activities[:6]
 
         recent_records = [
-            serialize_patient(p) for p in Patient.query.order_by(Patient.created_at.desc()).limit(8).all()
+            serialize_patient(p) for p in Patient.query.options(*get_patient_eager_options()).order_by(Patient.created_at.desc()).limit(8).all()
         ]
         recent_reports = [
             serialize_report(r) for r in Report.query.order_by(Report.uploaded_at.desc()).limit(8).all()
@@ -769,7 +1004,7 @@ def dashboard_stats():
         assigned_appnt_ids = db.session.query(Appointment.patient_id).filter_by(doctor_id=current_user.id)
         assigned_rx_ids = db.session.query(Prescription.patient_id).filter_by(doctor_id=current_user.id)
         assigned_order_ids = db.session.query(LabOrder.patient_id).filter_by(doctor_id=current_user.id)
-        assigned_patients = Patient.query.filter(
+        assigned_patients = Patient.query.options(*get_patient_eager_options(include_relations=True)).filter(
             (Patient.assigned_doctor_id == current_user.id) |
             (Patient.id.in_(assigned_appnt_ids)) |
             (Patient.id.in_(assigned_rx_ids)) |
@@ -873,10 +1108,8 @@ def dashboard_stats():
         })
 
     # Patient Portal Dashboard
-    patient_filter = (Patient.portal_id == current_user.portal_id)
-    if current_user.email:
-        patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
-    patient_records = Patient.query.filter(patient_filter).order_by(Patient.created_at.desc()).all()
+    patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
+    patient_records = Patient.query.options(*get_patient_eager_options(include_relations=True)).filter(patient_filter).order_by(Patient.created_at.desc()).all()
     latest_record = serialize_patient(patient_records[0], include_relations=True) if patient_records else None
     patient_ids = [p.id for p in patient_records]
 
@@ -884,6 +1117,7 @@ def dashboard_stats():
     upcoming_appointments_count = sum(1 for a in my_appointments if a.status in ("Pending", "Confirmed"))
 
     reports_count = Report.query.filter(Report.patient_id.in_(patient_ids)).count() if patient_ids else 0
+    prescriptions_count = Prescription.query.filter(Prescription.patient_id.in_(patient_ids)).count() if patient_ids else 0
     predictions_count = Prediction.query.filter(Prediction.patient_id.in_(patient_ids)).count() if patient_ids else 0
     recent_reports = Report.query.filter(Report.patient_id.in_(patient_ids)).order_by(Report.uploaded_at.desc()).limit(5).all() if patient_ids else []
 
@@ -913,6 +1147,7 @@ def dashboard_stats():
         "portal_id": current_user.portal_id,
         "records_count": len(patient_records),
         "reports_count": reports_count,
+        "prescriptions_count": prescriptions_count,
         "unreviewed_reports_count": unreviewed_reports_count,
         "reviewed_reports_count": reviewed_reports_count,
         "report_review_status": report_review_status,
@@ -952,51 +1187,22 @@ def get_patients():
 
     # 1. Role-based patient isolation
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
-        my_appnt_patients = db.session.query(Appointment.patient_id).filter_by(doctor_id=current_user.id)
-        my_rx_patients = db.session.query(Prescription.patient_id).filter_by(doctor_id=current_user.id)
-        my_order_patients = db.session.query(LabOrder.patient_id).filter_by(doctor_id=current_user.id)
-
-        is_my_patient = (
-            (Patient.assigned_doctor_id == current_user.id) |
-            (Patient.created_by_id == current_user.id) |
-            (Patient.id.in_(my_appnt_patients)) |
-            (Patient.id.in_(my_rx_patients)) |
-            (Patient.id.in_(my_order_patients))
-        )
-
-        other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-            Appointment.doctor_id != current_user.id,
-            Appointment.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-            Prescription.doctor_id != current_user.id,
-            Prescription.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_order_patients = db.session.query(LabOrder.patient_id).filter(
-            LabOrder.doctor_id != current_user.id,
-            LabOrder.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_assigned = db.session.query(Patient.id).filter(
-            Patient.assigned_doctor_id.isnot(None),
-            Patient.assigned_doctor_id != current_user.id
-        ).distinct()
-
-        is_other_doctor_patient = (
-            Patient.id.in_(other_doc_assigned) |
-            (Patient.id.in_(other_doc_appnt_patients) & ~is_my_patient) |
-            (Patient.id.in_(other_doc_rx_patients) & ~is_my_patient) |
-            (Patient.id.in_(other_doc_order_patients) & ~is_my_patient)
-        )
-
         if scope == "my_patients":
+            my_appnt_patients = db.session.query(Appointment.patient_id).filter_by(doctor_id=current_user.id)
+            my_rx_patients = db.session.query(Prescription.patient_id).filter_by(doctor_id=current_user.id)
+            my_order_patients = db.session.query(LabOrder.patient_id).filter_by(doctor_id=current_user.id)
+
+            is_my_patient = (
+                (Patient.assigned_doctor_id == current_user.id) |
+                (Patient.created_by_id == current_user.id) |
+                (Patient.id.in_(my_appnt_patients)) |
+                (Patient.id.in_(my_rx_patients)) |
+                (Patient.id.in_(my_order_patients))
+            )
             query = query.filter(is_my_patient)
-        else:
-            query = query.filter(is_my_patient | (~is_other_doctor_patient))
 
     # 2. Search & filtering (applied across all authorized roles)
     if q:
@@ -1026,7 +1232,7 @@ def get_patients():
     query = apply_safe_sorting(query, patient_sort_cols, sort_by, sort_dir, default_col="created_at", default_dir="desc")
 
     total = query.count()
-    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    items = query.options(*get_patient_eager_options()).offset((page - 1) * per_page).limit(per_page).all()
 
     return json_success({
         "patients": [serialize_patient(p) for p in items],
@@ -1040,7 +1246,7 @@ def get_patients():
 @api_bp.get("/patients/<int:patient_id>")
 @login_required
 def get_patient(patient_id):
-    patient = db.session.get(Patient, patient_id)
+    patient = Patient.query.options(*get_patient_eager_options(include_relations=True)).filter_by(id=patient_id).first()
     if not patient:
         return json_error("Patient not found", 404)
 
@@ -1690,22 +1896,15 @@ def get_patient_predictions(patient_id):
 def get_predictions():
     query = Prediction.query.join(Patient, Prediction.patient_id == Patient.id)
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
-        other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-            Appointment.doctor_id != current_user.id,
-            Appointment.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-            Prescription.doctor_id != current_user.id,
-            Prescription.doctor_id.isnot(None)
-        ).distinct()
-        query = query.filter(
-            ~Patient.id.in_(other_doc_appnt_patients) & ~Patient.id.in_(other_doc_rx_patients)
-        )
+        mine = str(request.args.get("mine", "")).lower() in ("true", "1")
+        if mine:
+            query = query.filter(
+                (Patient.assigned_doctor_id == current_user.id) |
+                (Patient.created_by_id == current_user.id)
+            )
 
     patient_id = request.args.get("patient_id", type=int)
     if patient_id:
@@ -1767,9 +1966,7 @@ def get_predictions():
 def get_prescriptions():
     query = Prescription.query.join(Patient, Prescription.patient_id == Patient.id).outerjoin(User, Prescription.doctor_id == User.id)
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role in ("hepatologist", "admin"):
         doctor_id = request.args.get("doctor_id", type=int)
@@ -2192,9 +2389,7 @@ def get_appointments():
     query = Appointment.query.join(Patient, Appointment.patient_id == Patient.id).outerjoin(User, Appointment.doctor_id == User.id)
 
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
         query = query.filter(Appointment.doctor_id == current_user.id)
@@ -2211,9 +2406,9 @@ def get_appointments():
 
     if patient_id:
         if current_user.role == "patient":
+            pt_id_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
             own_patient = Patient.query.filter(
-                (Patient.id == patient_id) &
-                ((Patient.portal_id == current_user.portal_id) | (Patient.email.ilike(current_user.email)))
+                (Patient.id == patient_id) & pt_id_filter
             ).first()
             if not own_patient:
                 abort(403, description="Access denied: You cannot view appointments of other patients.")
@@ -2695,32 +2890,12 @@ def get_lab_orders():
     query = LabOrder.query.join(Patient, LabOrder.patient_id == Patient.id).outerjoin(User, LabOrder.doctor_id == User.id)
 
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
         mine = str(request.args.get("mine", "")).lower() in ("true", "1")
         if mine:
             query = query.filter((LabOrder.doctor_id == current_user.id) | (Patient.assigned_doctor_id == current_user.id))
-        else:
-            other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-                Appointment.doctor_id != current_user.id,
-                Appointment.doctor_id.isnot(None)
-            ).distinct()
-            other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-                Prescription.doctor_id != current_user.id,
-                Prescription.doctor_id.isnot(None)
-            ).distinct()
-            other_doc_assigned = db.session.query(Patient.id).filter(
-                Patient.assigned_doctor_id.isnot(None),
-                Patient.assigned_doctor_id != current_user.id
-            ).distinct()
-            query = query.filter(
-                (LabOrder.doctor_id == current_user.id) |
-                (Patient.assigned_doctor_id == current_user.id) |
-                (~Patient.id.in_(other_doc_appnt_patients) & ~Patient.id.in_(other_doc_rx_patients) & ~Patient.id.in_(other_doc_assigned))
-            )
     elif current_user.role in ("admin", "labtech"):
         pass
     else:
@@ -3020,22 +3195,15 @@ def submit_lab_order_doctor_decision(order_id):
 def get_reports():
     query = Report.query.join(Patient, Report.patient_id == Patient.id)
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
-        other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-            Appointment.doctor_id != current_user.id,
-            Appointment.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-            Prescription.doctor_id != current_user.id,
-            Prescription.doctor_id.isnot(None)
-        ).distinct()
-        query = query.filter(
-            ~Patient.id.in_(other_doc_appnt_patients) & ~Patient.id.in_(other_doc_rx_patients)
-        )
+        mine = str(request.args.get("mine", "")).lower() in ("true", "1")
+        if mine:
+            query = query.filter(
+                (Patient.assigned_doctor_id == current_user.id) |
+                (Patient.created_by_id == current_user.id)
+            )
 
     patient_id = request.args.get("patient_id", type=int)
     if patient_id:
@@ -3748,22 +3916,15 @@ def get_reports_analytics():
 
     # 1. Role-based patient isolation
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
-        other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-            Appointment.doctor_id != current_user.id,
-            Appointment.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-            Prescription.doctor_id != current_user.id,
-            Prescription.doctor_id.isnot(None)
-        ).distinct()
-        query = query.filter(
-            ~Patient.id.in_(other_doc_appnt_patients) & ~Patient.id.in_(other_doc_rx_patients)
-        )
+        mine = str(request.args.get("mine", "")).lower() in ("true", "1")
+        if mine:
+            query = query.filter(
+                (Patient.assigned_doctor_id == current_user.id) |
+                (Patient.created_by_id == current_user.id)
+            )
 
     # 2. Patient ID filter (verify accessibility if requested)
     if patient_id:
@@ -3859,22 +4020,15 @@ def get_analytics():
 
     query = Patient.query
     if current_user.role == "patient":
-        patient_filter = (Patient.portal_id == current_user.portal_id)
-        if current_user.email:
-            patient_filter = patient_filter | (Patient.email.ilike(current_user.email))
+        patient_filter = (Patient.portal_id == current_user.portal_id) if current_user.portal_id else (Patient.email.ilike(current_user.email))
         query = query.filter(patient_filter)
     elif current_user.role == "hepatologist":
-        other_doc_appnt_patients = db.session.query(Appointment.patient_id).filter(
-            Appointment.doctor_id != current_user.id,
-            Appointment.doctor_id.isnot(None)
-        ).distinct()
-        other_doc_rx_patients = db.session.query(Prescription.patient_id).filter(
-            Prescription.doctor_id != current_user.id,
-            Prescription.doctor_id.isnot(None)
-        ).distinct()
-        query = query.filter(
-            ~Patient.id.in_(other_doc_appnt_patients) & ~Patient.id.in_(other_doc_rx_patients)
-        )
+        mine = str(request.args.get("mine", "")).lower() in ("true", "1")
+        if mine:
+            query = query.filter(
+                (Patient.assigned_doctor_id == current_user.id) |
+                (Patient.created_by_id == current_user.id)
+            )
 
     query = apply_date_range_filter(query, Patient.created_at, start_date, end_date)
     patients = query.all()

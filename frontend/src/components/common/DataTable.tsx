@@ -50,9 +50,9 @@ export function DataTable<T extends Record<string, any>>({
       )}
 
       <div className="w-full overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
+        <table className="w-full text-left text-[15px] border-collapse">
           <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <tr className="bg-slate-50/80 border-b border-slate-100 text-[14px] font-bold text-slate-600 uppercase tracking-wider">
               {columns.map((col) => {
                 const isSorted = sortColumn === col.key;
                 return (

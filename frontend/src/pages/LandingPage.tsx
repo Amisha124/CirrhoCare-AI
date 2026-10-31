@@ -75,17 +75,17 @@ export const LandingPage: React.FC = () => {
               <HeartPulse className="w-6 h-6 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-extrabold tracking-tight text-slate-900 flex items-center gap-1.5 leading-none">
+              <span className="text-2xl font-extrabold tracking-tight text-slate-900 flex items-center gap-1.5 leading-none font-manrope">
                 CirrhoCare <span className="text-[#1877F2] font-black text-xs px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200">AI</span>
               </span>
-              <span className="text-[11px] font-semibold text-slate-500 tracking-normal mt-0.5">
+              <span className="text-[13px] font-semibold text-slate-500 tracking-normal mt-0.5">
                 {t('Smarter Liver Health', 'स्मार्ट लिवर स्वास्थ्य')}
               </span>
             </div>
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 text-[13px] font-semibold text-slate-600">
+          <nav className="hidden lg:flex items-center gap-2 text-[15px] sm:text-[16px] font-semibold text-slate-600">
             <button
               onClick={() => scrollToSection('home')}
               className="px-3 py-2 rounded-lg hover:text-[#1877F2] hover:bg-slate-50 transition"
@@ -217,9 +217,9 @@ export const LandingPage: React.FC = () => {
             <Link to="/login">
               <Button
                 variant="primary"
-                size="sm"
-                className="bg-[#1877F2] hover:bg-blue-700 text-white shadow-sm font-semibold text-xs px-4 py-2 rounded-xl"
-                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                size="md"
+                className="bg-[#1877F2] hover:bg-blue-700 text-white shadow-sm font-semibold text-[15px] px-5 py-2.5 rounded-xl"
+                rightIcon={<ArrowRight className="w-4 h-4" />}
               >
                 {t('Sign In', 'साइन इन')}
               </Button>

@@ -820,8 +820,47 @@ export const AdminDashboardPage: React.FC = () => {
   };
 
   const recentActivities = useMemo(() => {
-    if (logsList && logsList.length >= 4) {
-      return logsList.slice(0, 4).map((log, idx) => {
+    const getRelativeTime = (isoString?: string) => {
+      if (!isoString) return 'Recently';
+      try {
+        const d = new Date(isoString);
+        const diffMs = Date.now() - d.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours < 1) {
+          const diffMins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+          return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        }
+        if (diffHours < 24) {
+          return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        }
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      } catch {
+        return 'Recently';
+      }
+    };
+
+    // Filter clinical activity logs, strictly ignoring login / auth / password logs
+    const clinicalLogs = (logsList || []).filter((log) => {
+      const act = (log.action || '').toLowerCase();
+      const det = (log.details || '').toLowerCase();
+      const isAuthNoise =
+        act.includes('login') ||
+        act.includes('logout') ||
+        act.includes('auth') ||
+        act.includes('token') ||
+        act.includes('password') ||
+        act.includes('pin') ||
+        act.includes('session') ||
+        det.includes('signed in') ||
+        det.includes('logged out') ||
+        det.includes('session authenticated') ||
+        det.includes('token');
+      return !isAuthNoise;
+    });
+
+    if (clinicalLogs.length >= 4) {
+      return clinicalLogs.slice(0, 4).map((log, idx) => {
         let icon = <FileText className="w-4 h-4 text-[#1877F2]" />;
         let bg = 'bg-blue-50';
         const detLower = (log.details || '').toLowerCase();
@@ -839,7 +878,7 @@ export const AdminDashboardPage: React.FC = () => {
         return {
           id: log.id || idx,
           title: log.details || `${log.action} by ${log.user_name || 'Staff'}`,
-          time: log.created_at ? `${idx === 0 ? '2 hours ago' : idx === 1 ? '5 hours ago' : '1 day ago'}` : `${idx * 2 + 2} hours ago`,
+          time: getRelativeTime(log.created_at),
           icon,
           bg,
         };
@@ -850,28 +889,28 @@ export const AdminDashboardPage: React.FC = () => {
       {
         id: 1,
         title: isHindi ? 'आयशा पटेल के लिए नई लैब रिपोर्ट अपलोड की गई' : 'New lab report uploaded for Aisha Patel',
-        time: isHindi ? '2 hours ago' : '2 hours ago',
+        time: isHindi ? '2 घंटे पहले' : '2 hours ago',
         icon: <FileText className="w-4 h-4 text-[#1877F2]" />,
         bg: 'bg-blue-50',
       },
       {
         id: 2,
         title: isHindi ? 'मार्कस हॉलोवे के लिए दवा का पर्चा जोड़ा गया' : 'Prescription added for Marcus Holloway',
-        time: isHindi ? '5 hours ago' : '5 hours ago',
+        time: isHindi ? '5 घंटे पहले' : '5 hours ago',
         icon: <Pill className="w-4 h-4 text-purple-600" />,
         bg: 'bg-purple-50',
       },
       {
         id: 3,
         title: isHindi ? 'नए मरीज़ ग्रेस हॉपर का पंजीकरण हुआ' : 'New patient registered Grace Hopper',
-        time: isHindi ? '1 day ago' : '1 day ago',
+        time: isHindi ? '1 दिन पहले' : '1 day ago',
         icon: <UserCheck className="w-4 h-4 text-emerald-600" />,
         bg: 'bg-emerald-50',
       },
       {
         id: 4,
         title: isHindi ? 'कृष्णा सिंह के लिए टेस्ट परिणाम अपडेट किया गया' : 'Test result updated for Krishna Singh',
-        time: isHindi ? '1 day ago' : '1 day ago',
+        time: isHindi ? '1 दिन पहले' : '1 day ago',
         icon: <Activity className="w-4 h-4 text-sky-600" />,
         bg: 'bg-sky-50',
       },
@@ -920,10 +959,10 @@ export const AdminDashboardPage: React.FC = () => {
             <div className="flex flex-col xl:flex-row items-center justify-between gap-6">
               {/* Left: Titles & Badges */}
               <div className="space-y-3 flex-1 min-w-0">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                <h1 className="text-3xl lg:text-[36px] font-extrabold text-slate-900 tracking-tight leading-tight font-manrope">
                   {t('Welcome back, System Admin! 👋', 'वापसी पर स्वागत है, सिस्टम एडमिन! 👋')}
                 </h1>
-                <p className="text-slate-600 text-xs sm:text-sm max-w-xl leading-relaxed">
+                <p className="text-slate-600 text-sm sm:text-base max-w-xl leading-relaxed font-normal">
                   {t(
                     'Real-time operational surveillance of patient admissions, laboratory pipelines, treatment statuses, appointments, and non-repudiation audit security.',
                     'मरीज़ प्रवेश, प्रयोगशाला प्रक्रिया, उपचार स्थिति, अपॉइंटमेंट्स और सुरक्षा ऑडिट की रीयल-टाइम परिचालन निगरानी।'
@@ -942,25 +981,21 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
 
               {/* Center & Right: Hero Photo & Floating Quote Card */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0 w-full xl:w-auto justify-end">
-                <div className="relative overflow-hidden rounded-2xl shadow-sm border border-white/80 bg-white shrink-0">
+              <div className="flex items-center gap-3 shrink-0 w-full xl:w-auto justify-end">
+                <div className="relative overflow-hidden rounded-2xl shadow-xs border border-white/80 bg-white shrink-0">
                   <img
-                    src="/assets/admin_hero_female_desk.jpg"
-                    alt="Healthcare Administrator Surveillance"
-                    className="h-36 sm:h-40 md:h-44 w-auto object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
+                    src="/assets/admin_hero_female_surveillance.png"
+                    alt="Operational Surveillance"
+                    className="h-28 sm:h-32 xl:h-36 w-auto object-cover rounded-xl"
                   />
                 </div>
 
-                <div className="bg-white/95 backdrop-blur-xs rounded-2xl p-4 border border-slate-200/80 shadow-xs max-w-xs shrink-0">
-                  <p className="text-xs font-semibold text-slate-800 italic leading-relaxed">
-                    "{t('Data-driven care for healthier livers and brighter tomorrows.', 'स्वस्थ लिवर और बेहतर कल के लिए डेटा-संचालित देखभाल।')}"
-                  </p>
-                  <p className="text-[11px] text-slate-400 font-medium mt-2">
-                    — CirrhoCare AI Vision
-                  </p>
+                <div className="relative overflow-hidden rounded-2xl shadow-xs border border-white/80 bg-white shrink-0 hidden sm:block">
+                  <img
+                    src="/assets/admin_hero_quote_card.png"
+                    alt="CirrhoCare AI Vision"
+                    className="h-28 sm:h-32 xl:h-36 w-auto object-contain rounded-xl"
+                  />
                 </div>
               </div>
             </div>
@@ -1110,31 +1145,35 @@ export const AdminDashboardPage: React.FC = () => {
               {/* 1. Total Patients */}
               <div
                 onClick={() => handleTabChange('patients')}
-                className="bg-[#EBF5FF] rounded-2xl p-4 border border-blue-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#EBF5FF] rounded-2xl p-3.5 border border-blue-100 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-blue-100/70 text-[#1877F2] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-blue-100/80 text-[#087CF0] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <Users className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('Total Patients', 'कुल मरीज़')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{totalPatients}</div>
-                <div className="text-emerald-600 font-semibold text-[11px] flex items-center gap-1 mt-1 truncate">
-                  <TrendingUp className="w-3 h-3" />
-                  <span>+3 this week</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('Total Patients', 'कुल मरीज़')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{totalPatients}</div>
+                  <div className="text-emerald-600 font-semibold text-xs flex items-center gap-1 mt-0.5 truncate">
+                    <TrendingUp className="w-3 h-3 text-emerald-600 shrink-0" />
+                    <span>+3 this week</span>
+                  </div>
                 </div>
               </div>
 
               {/* 2. Active Staff */}
               <div
                 onClick={() => handleTabChange('users')}
-                className="bg-[#FFF5EB] rounded-2xl p-4 border border-amber-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FFF5EB] rounded-2xl p-3.5 border border-amber-100 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-100/70 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <UserCheck className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('Active Staff', 'सक्रिय कर्मचारी')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{activeStaffCount}</div>
-                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
-                  2 Doctors • 1 Lab • 1 Admin
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('Active Staff', 'सक्रिय कर्मचारी')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{activeStaffCount}</div>
+                  <div className="text-slate-500 font-medium text-xs mt-0.5 truncate">
+                    2 Doctors • 1 Lab • 1 Admin
+                  </div>
                 </div>
               </div>
 
@@ -1144,16 +1183,18 @@ export const AdminDashboardPage: React.FC = () => {
                   setPatientRiskFilter('High Risk');
                   handleTabChange('patients');
                 }}
-                className="bg-[#FEF2F2] rounded-2xl p-4 border border-rose-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FEF2F2] rounded-2xl p-3.5 border border-rose-100 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-rose-100/70 text-rose-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('High Risk Patients', 'उच्च जोखिम मरीज़')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{highRiskCount}</div>
-                <div className="text-rose-600 font-semibold text-[11px] flex items-center gap-1 mt-1 truncate">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                  <span>≥ 70% risk probability</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('High Risk Patients', 'उच्च जोखिम मरीज़')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{highRiskCount}</div>
+                  <div className="text-rose-600 font-medium text-xs flex items-center gap-1 mt-0.5 truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                    <span>≥ 70% risk probability</span>
+                  </div>
                 </div>
               </div>
 
@@ -1163,15 +1204,17 @@ export const AdminDashboardPage: React.FC = () => {
                   setPatientRiskFilter('Medium Risk');
                   handleTabChange('patients');
                 }}
-                className="bg-[#FFFBEB] rounded-2xl p-4 border border-amber-100/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FFFBEB] rounded-2xl p-3.5 border border-amber-100/80 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-100/70 text-amber-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <BarChart3 className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('Medium Risk Patients', 'मध्यम जोखिम मरीज़')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{mediumRiskCount}</div>
-                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
-                  30% - 70% risk
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('Medium Risk Patients', 'मध्यम जोखिम मरीज़')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{mediumRiskCount}</div>
+                  <div className="text-slate-500 font-medium text-xs mt-0.5 truncate">
+                    30% - 70% risk
+                  </div>
                 </div>
               </div>
 
@@ -1181,30 +1224,34 @@ export const AdminDashboardPage: React.FC = () => {
                   setPatientRiskFilter('Low Risk');
                   handleTabChange('patients');
                 }}
-                className="bg-[#ECFDF5] rounded-2xl p-4 border border-emerald-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#ECFDF5] rounded-2xl p-3.5 border border-emerald-100 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('Low Risk Patients', 'निम्न जोखिम मरीज़')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{lowRiskCount}</div>
-                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
-                  &lt; 30% risk
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('Low Risk Patients', 'निम्न जोखिम मरीज़')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{lowRiskCount}</div>
+                  <div className="text-slate-500 font-medium text-xs mt-0.5 truncate">
+                    &lt; 30% risk
+                  </div>
                 </div>
               </div>
 
               {/* 6. Pending Appointments */}
               <div
                 onClick={() => handleTabChange('patients')}
-                className="bg-[#FAF5FF] rounded-2xl p-4 border border-purple-100 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                className="bg-[#FAF5FF] rounded-2xl p-3.5 border border-purple-100 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-xl bg-purple-100/70 text-purple-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-purple-100/80 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <Calendar className="w-5 h-5" />
                 </div>
-                <div className="text-xs font-semibold text-slate-600 truncate">{t('Pending Appointments', 'लंबित अपॉइंटमेंट')}</div>
-                <div className="text-2xl font-extrabold text-slate-900 mt-0.5 tracking-tight">{pendingAppointmentsCount}</div>
-                <div className="text-slate-400 font-medium text-[11px] mt-1 truncate">
-                  Consultation requests
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500 truncate">{t('Pending Appointments', 'लंबित अपॉइंटमेंट')}</div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mt-0.5">{pendingAppointmentsCount}</div>
+                  <div className="text-slate-500 font-medium text-xs mt-0.5 truncate">
+                    Consultation requests
+                  </div>
                 </div>
               </div>
             </div>
@@ -1219,7 +1266,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
                         <PieChart className="w-4 h-4" />
                       </div>
-                      <h2 className="text-sm font-bold text-slate-900">{t('Risk Distribution', 'जोखिम वितरण')}</h2>
+                      <h2 className="text-base font-bold text-slate-900">{t('Risk Distribution', 'जोखिम वितरण')}</h2>
                     </div>
                     <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 font-medium shadow-2xs">
                       <span>{t('All Patients', 'सभी मरीज़')}</span>
@@ -1314,7 +1361,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
                         <Activity className="w-4 h-4" />
                       </div>
-                      <h2 className="text-sm font-bold text-slate-900">{t('Treatment Status', 'उपचार स्थिति')}</h2>
+                      <h2 className="text-base font-bold text-slate-900">{t('Treatment Status', 'उपचार स्थिति')}</h2>
                     </div>
                     <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 font-medium shadow-2xs">
                       <span>{t('All Patients', 'सभी मरीज़')}</span>
@@ -1387,7 +1434,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
                         <FileText className="w-4 h-4" />
                       </div>
-                      <h2 className="text-sm font-bold text-slate-900">{t('Recent Activities', 'हाल की गतिविधियां')}</h2>
+                      <h2 className="text-base font-bold text-slate-900">{t('Recent Activities', 'हाल की गतिविधियां')}</h2>
                     </div>
                     <button
                       onClick={() => handleTabChange('audit')}
@@ -1426,7 +1473,7 @@ export const AdminDashboardPage: React.FC = () => {
                   <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1877F2] flex items-center justify-center shrink-0">
                     <Users className="w-4 h-4" />
                   </div>
-                  <h2 className="text-base font-bold text-slate-900">{t('Recent Patients', 'हाल के मरीज़')}</h2>
+                  <h2 className="text-lg font-bold text-slate-900">{t('Recent Patients', 'हाल के मरीज़')}</h2>
                 </div>
                 <button
                   onClick={() => handleTabChange('patients')}
@@ -1437,8 +1484,8 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <table className="w-full text-left text-[15px] text-slate-800">
+                  <thead className="bg-slate-50/80 border-b border-slate-200/80 text-[14px] font-bold text-slate-600 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-3">#</th>
                       <th className="py-3 px-4">{t('Patient Name', 'मरीज़ का नाम')}</th>
@@ -1462,9 +1509,9 @@ export const AdminDashboardPage: React.FC = () => {
                       recentPatientsList.map((pt, idx) => (
                         <tr key={pt.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3 px-3 text-slate-400 font-medium">{idx + 1}</td>
-                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">{pt.full_name}</td>
-                          <td className="py-3 px-4 font-mono text-slate-500 text-xs whitespace-nowrap">{pt.portal_id}</td>
-                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap text-[15px]">{pt.full_name}</td>
+                          <td className="py-3 px-4 font-mono text-slate-600 text-[14px] whitespace-nowrap">{pt.portal_id}</td>
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap text-[15px]">
                             {pt.age} / {pt.gender === 'Female' ? 'F' : pt.gender === 'Male' ? 'M' : 'O'}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
@@ -1473,16 +1520,16 @@ export const AdminDashboardPage: React.FC = () => {
                           <td className="py-3 px-4 whitespace-nowrap">
                             {renderTableStatusPill(pt.treatment_status, pt.lab_workflow_status)}
                           </td>
-                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap text-[14px]">
                             {formatTableDate(pt.reports?.[0]?.uploaded_at || pt.created_at)}
                           </td>
-                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap text-[14px]">
                             {formatTableDate(pt.created_at)}
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
                             <button
                               onClick={() => handleOpenPatientDetails(pt.id)}
-                              className="bg-[#1877F2] hover:bg-blue-600 text-white font-semibold text-xs px-4 py-1.5 rounded-lg shadow-2xs transition cursor-pointer"
+                              className="bg-[#1877F2] hover:bg-blue-600 text-white font-semibold text-[14px] px-4 py-1.5 rounded-lg shadow-2xs transition cursor-pointer"
                             >
                               {isHindi ? 'देखें' : 'View'}
                             </button>

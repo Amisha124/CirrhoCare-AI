@@ -5,14 +5,21 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 
 # Load .env file if available
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
     DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1")
     DEMO_UPLOAD_FOLDER = Path(os.getenv("DEMO_UPLOAD_FOLDER", BASE_DIR / "instance" / "demo_uploads"))
-    if DEMO_MODE:
+    raw_db_url = os.getenv("DATABASE_URL")
+    if raw_db_url and (raw_db_url.strip().startswith("postgres://") or raw_db_url.strip().startswith("postgresql://")):
+        db_url_clean = raw_db_url.strip()
+        if db_url_clean.startswith("postgres://"):
+            db_url_clean = "postgresql://" + db_url_clean[len("postgres://"):]
+        SQLALCHEMY_DATABASE_URI = db_url_clean
+        UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", DEMO_UPLOAD_FOLDER if DEMO_MODE else BASE_DIR / "instance" / "uploads"))
+    elif DEMO_MODE:
         SQLALCHEMY_DATABASE_URI = os.getenv(
             "DEMO_DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'demo_cirrhosis.db'}"
         )
@@ -23,6 +30,10 @@ class Config:
         )
         UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", BASE_DIR / "instance" / "uploads"))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
     WTF_CSRF_TIME_LIMIT = None
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 8 * 1024 * 1024))
     ALLOWED_UPLOADS = {"pdf", "png", "jpg", "jpeg", "webp", "doc", "docx"}
@@ -38,3 +49,8 @@ class Config:
     RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "CirrhoCare AI <onboarding@resend.dev>")
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     BREVO_FROM_EMAIL = os.getenv("BREVO_FROM_EMAIL", "no-reply@cirrhocare.ai")
+
+    # Google OAuth 2.0
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "").strip()

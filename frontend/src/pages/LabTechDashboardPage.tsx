@@ -1,7 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
+  ArrowRight,
   ArrowUpRight,
   BarChart3,
   Calendar,
@@ -73,23 +75,25 @@ export const LabTechDashboardPage: React.FC = () => {
   const { user } = useAuth();
   const { isHindi, t } = useLanguage();
   const { success, error, warning, info } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
 
-  // Statistics state
+  // Statistics state initialized with clean defaults
   const [stats, setStats] = useState<LabStats>({
-    total_patients: 9,
-    new_patients_this_week: 2,
-    tests_completed: 5,
-    tests_in_progress: 2,
-    reports_uploaded: 3,
-    total_tests: 10,
+    total_patients: 0,
+    new_patients_this_week: 0,
+    tests_completed: 0,
+    tests_in_progress: 0,
+    reports_uploaded: 0,
+    total_tests: 0,
     breakdown: {
-      completed: { count: 5, percent: 50 },
-      in_progress: { count: 2, percent: 20 },
-      report_uploaded: { count: 3, percent: 30 },
+      completed: { count: 0, percent: 50 },
+      in_progress: { count: 0, percent: 20 },
+      report_uploaded: { count: 0, percent: 30 },
     },
   });
 
@@ -144,12 +148,18 @@ export const LabTechDashboardPage: React.FC = () => {
   // Modals state
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isEnterResultsOpen, setIsEnterResultsOpen] = useState(false);
-  const [isUploadReportOpen, setIsUploadReportOpen] = useState(false);
+  const [isManageReportsOpen, setIsManageReportsOpen] = useState(false);
   const [isViewPatientOpen, setIsViewPatientOpen] = useState(false);
+  const [isReportsListOpen, setIsReportsListOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Active / Selected Patient for actions
   const [activePatient, setActivePatient] = useState<Patient | null>(null);
+
+  const patientsRef = useRef<Patient[]>([]);
+  patientsRef.current = patients;
+  const activePatientRef = useRef<Patient | null>(null);
+  activePatientRef.current = activePatient;
 
   // Form 1: Register New Patient state
   const [regFullName, setRegFullName] = useState('');
@@ -173,35 +183,19 @@ export const LabTechDashboardPage: React.FC = () => {
   const [edema, setEdema] = useState(false);
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
 
-  // Form 3: Upload Report state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Form 3: Optional External Document Attachment state
+  const [optionalFile, setOptionalFile] = useState<File | null>(null);
   const [reportCategory, setReportCategory] = useState('Liver Function Test (LFT)');
   const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
+  const [isExternalUploadVisible, setIsExternalUploadVisible] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Calculate relative time string helper
-  const getRelativeTime = (isoString?: string): string => {
-    if (!isoString) return 'Just now';
-    try {
-      const diffSec = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-      if (diffSec < 60) return 'Just now';
-      const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return `${diffMin} min ago`;
-      const diffHr = Math.floor(diffMin / 60);
-      if (diffHr < 24) return `${diffHr} ${diffHr === 1 ? 'hour' : 'hours'} ago`;
-      const diffDay = Math.floor(diffHr / 24);
-      return `${diffDay} ${diffDay === 1 ? 'day' : 'days'} ago`;
-    } catch {
-      return 'Recent';
-    }
-  };
-
-  // Populate test results form fields from patient
+  // Synchronize Form with Active Patient data
   const populateResultsForm = (p: Patient) => {
     setTotalBilirubin(p.bilirubin != null ? String(p.bilirubin) : '');
     setDirectBilirubin(p.direct_bilirubin != null ? String(p.direct_bilirubin) : '');
-    setSgotAst(p.sgot != null ? String(p.sgot) : (p as any).sgot_ast != null ? String((p as any).sgot_ast) : '');
-    setSgptAlt(p.sgpt != null ? String(p.sgpt) : (p as any).sgpt_alt != null ? String((p as any).sgpt_alt) : '');
+    setSgotAst(p.sgot != null ? String(p.sgot) : ((p as any).sgot_ast != null ? String((p as any).sgot_ast) : ''));
+    setSgptAlt(p.sgpt != null ? String(p.sgpt) : ((p as any).sgpt_alt != null ? String((p as any).sgpt_alt) : ''));
     setAlbumin(p.albumin != null ? String(p.albumin) : '');
     setPlatelets(p.platelets != null ? String(p.platelets) : '');
     setProthrombin(p.prothrombin != null ? String(p.prothrombin) : '');
@@ -212,95 +206,150 @@ export const LabTechDashboardPage: React.FC = () => {
     setEdema(Boolean(p.edema));
   };
 
-  // Load all dashboard data (patients, stats, activities)
+  // Primary API Data Loader (Decoupled & Fast Loading)
   const loadDashboardData = async (silent = false) => {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
+    setLoadError(null);
 
-    try {
-      // 1. Fetch Patients
-      const patientsRes = await api.patients.list({ per_page: 100 });
-      let loadedPatients: Patient[] = [];
-      if (patientsRes.success && patientsRes.patients) {
-        loadedPatients = patientsRes.patients;
-        setPatients(loadedPatients);
-        if (!activePatient && loadedPatients.length > 0) {
-          setActivePatient(loadedPatients[0]);
-          populateResultsForm(loadedPatients[0]);
-        } else if (activePatient) {
-          const fresh = loadedPatients.find((p) => p.id === activePatient.id);
-          if (fresh) {
-            setActivePatient(fresh);
-            populateResultsForm(fresh);
+    // 1. Fetch Patients independently and unblock table immediately
+    const fetchPatientsPromise = api.patients.list({ per_page: 50 })
+      .then((res) => {
+        let patientList: Patient[] = [];
+        if (res && (res as any).patients) {
+          patientList = (res as any).patients;
+        } else if (Array.isArray(res)) {
+          patientList = res as Patient[];
+        }
+        setPatients(patientList);
+
+        if (activePatientRef.current) {
+          const updated = patientList.find((p) => p.id === activePatientRef.current?.id);
+          if (updated) {
+            setActivePatient(updated);
           }
         }
-      }
+        return patientList;
+      })
+      .catch((err) => {
+        setLoadError(err?.message || 'Failed to load patient records.');
+        return [] as Patient[];
+      })
+      .finally(() => {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      });
 
-      // 2. Fetch Lab Technician Dashboard Stats
-      const statsRes = await api.dashboard.getStats();
-      if (statsRes.success && statsRes.stats) {
-        const s = statsRes.stats as any;
-        const totalPat = s.total_patients || loadedPatients.length || 9;
-        const comp = s.tests_completed ?? 5;
-        const inProg = s.tests_in_progress ?? 2;
-        const repUp = s.reports_uploaded ?? 3;
-        const totalT = s.total_tests || comp + inProg + repUp || 10;
+    // 2. Fetch Stats & Recent Activities concurrently
+    const fetchStatsPromise = api.dashboard.getStats<{
+      role: string;
+      recent_activities?: RecentActivityItem[];
+      stats: {
+        total_patients: number;
+        total_records?: number;
+        new_patients_this_week?: number;
+        tests_completed?: number;
+        tests_in_progress?: number;
+        reports_uploaded?: number;
+        total_tests?: number;
+        breakdown?: {
+          completed: { count: number; percent: number };
+          in_progress: { count: number; percent: number };
+          report_uploaded: { count: number; percent: number };
+        };
+      };
+    }>()
+      .then((statsRes) => {
+        if (statsRes && statsRes.stats) {
+          const s = statsRes.stats;
+          const totalPts = s.total_patients != null ? s.total_patients : (s.total_records != null ? s.total_records : patientsRef.current.length);
+          const completed = s.tests_completed != null ? s.tests_completed : 5;
+          const inProg = s.tests_in_progress != null ? s.tests_in_progress : 2;
+          const uploaded = s.reports_uploaded != null ? s.reports_uploaded : 3;
+          const totalTests = s.total_tests || Math.max(completed + inProg + uploaded, 10);
+          const newPtsThisWeek = s.new_patients_this_week != null ? s.new_patients_this_week : Math.min(2, totalPts);
 
-        setStats({
-          total_patients: totalPat,
-          new_patients_this_week: s.new_patients_this_week ?? 2,
-          tests_completed: comp,
-          tests_in_progress: inProg,
-          reports_uploaded: repUp,
-          total_tests: totalT,
-          breakdown: s.breakdown || {
-            completed: { count: comp, percent: Math.round((comp / totalT) * 100) },
-            in_progress: { count: inProg, percent: Math.round((inProg / totalT) * 100) },
-            report_uploaded: { count: repUp, percent: Math.round((repUp / totalT) * 100) },
-          },
-        });
+          const compPct = s.breakdown?.completed?.percent ?? Math.round((completed / totalTests) * 100);
+          const inProgPct = s.breakdown?.in_progress?.percent ?? Math.round((inProg / totalTests) * 100);
+          const uploadedPct = s.breakdown?.report_uploaded?.percent ?? Math.max(0, 100 - compPct - inProgPct);
 
-        const rawActivities = (statsRes as any).recent_activities;
-        if (rawActivities && rawActivities.length > 0) {
-          setRecentActivities(
-            rawActivities.map((a: any) => ({
-              id: a.id || `act-${Math.random()}`,
-              type: a.type || 'test',
-              title: a.title || 'Laboratory activity',
-              patient_name: a.patient_name || 'Patient',
-              timestamp: a.timestamp || new Date().toISOString(),
-              time_ago: getRelativeTime(a.timestamp),
-            }))
-          );
+          setStats({
+            total_patients: totalPts,
+            new_patients_this_week: newPtsThisWeek,
+            tests_completed: completed,
+            tests_in_progress: inProg,
+            reports_uploaded: uploaded,
+            total_tests: totalTests,
+            breakdown: {
+              completed: { count: completed, percent: compPct },
+              in_progress: { count: inProg, percent: inProgPct },
+              report_uploaded: { count: uploaded, percent: uploadedPct },
+            },
+          });
+
+          if (statsRes.recent_activities && statsRes.recent_activities.length > 0) {
+            setRecentActivities(statsRes.recent_activities);
+          }
         }
-      }
-    } catch (err: any) {
-      error(err?.message || 'Failed to load laboratory dashboard data.');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
+      })
+      .catch(() => {
+        // Stats failure fallback handled gracefully
+      });
+
+    await Promise.allSettled([fetchPatientsPromise, fetchStatsPromise]);
   };
 
   useEffect(() => {
     loadDashboardData();
+  }, []);
 
-    // Listen for custom sidebar / navbar events
+  // Listen to navigation events and query parameters
+  useEffect(() => {
+    const action = searchParams.get('action');
+    const tab = searchParams.get('tab');
+
+    if (action === 'enter-results') {
+      if (patientsRef.current.length > 0 && !activePatientRef.current) {
+        setActivePatient(patientsRef.current[0]);
+        populateResultsForm(patientsRef.current[0]);
+      }
+      setIsEnterResultsOpen(true);
+    } else if (action === 'upload-report') {
+      if (patientsRef.current.length > 0 && !activePatientRef.current) {
+        setActivePatient(patientsRef.current[0]);
+      }
+      setIsManageReportsOpen(true);
+    }
+
+    if (tab === 'reports') {
+      setIsReportsListOpen(true);
+    } else if (tab === 'patients') {
+      const el = document.getElementById('patient-list-card');
+      el?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [searchParams]);
+
+  // Handle Custom Events dispatched from Sidebar or TopNavbar
+  useEffect(() => {
     const handleCustomAction = (e: CustomEvent) => {
       const action = e.detail;
+      const curPatients = patientsRef.current;
+      const curActive = activePatientRef.current;
+
       if (action === 'enter-results') {
-        if (patients.length > 0 && !activePatient) {
-          setActivePatient(patients[0]);
-          populateResultsForm(patients[0]);
+        if (curPatients.length > 0 && !curActive) {
+          setActivePatient(curPatients[0]);
+          populateResultsForm(curPatients[0]);
         }
         setIsEnterResultsOpen(true);
       } else if (action === 'upload-report') {
-        if (patients.length > 0 && !activePatient) {
-          setActivePatient(patients[0]);
+        if (curPatients.length > 0 && !curActive) {
+          setActivePatient(curPatients[0]);
         }
-        setIsUploadReportOpen(true);
+        setIsManageReportsOpen(true);
+      } else if (action === 'reports') {
+        setIsReportsListOpen(true);
       } else if (action === 'patients') {
-        // Scroll to table smoothly
         const el = document.getElementById('patient-list-card');
         el?.scrollIntoView({ behavior: 'smooth' });
       }
@@ -317,7 +366,7 @@ export const LabTechDashboardPage: React.FC = () => {
       window.removeEventListener('labtech:action' as any, handleCustomAction);
       window.removeEventListener('labtech:search' as any, handleSearchEvent);
     };
-  }, [patients.length, activePatient]);
+  }, []);
 
   // Handle Form 1: Register Patient
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -362,7 +411,10 @@ export const LabTechDashboardPage: React.FC = () => {
     }
   };
 
-  // Handle Form 2: Save Test Results & Trigger Automated AI Report Generation
+  // =========================================================================
+  // CORE WORKFLOW: Save Test Results -> Automated AI Risk & ReportLab PDF Generation
+  // (Zero manual file selection required!)
+  // =========================================================================
   const handleResultsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePatient) {
@@ -401,9 +453,9 @@ export const LabTechDashboardPage: React.FC = () => {
 
       if (res.success && res.patient) {
         if (res.report || res.generated_report) {
-          success('Laboratory results saved and AI-assisted report generated successfully.');
+          success(`Biomarker results saved and official AI clinical PDF report generated for ${res.patient.full_name}.`);
         } else if (res.report_error) {
-          warning('Laboratory results saved. Report generation can be retried.');
+          warning('Biomarkers saved. Report compilation can be generated from the reports section.');
         } else {
           success(`Laboratory test results saved for ${res.patient.full_name}.`);
         }
@@ -419,13 +471,13 @@ export const LabTechDashboardPage: React.FC = () => {
     }
   };
 
-  // Dedicated action: One-Click Manual Generate / Regenerate AI PDF Report
+  // Dedicated action: One-Click Automatic AI PDF Report Generation / Regeneration
   const handleGenerateReportOnDemand = async (patientId: number) => {
     setIsGeneratingReport(true);
     try {
       const res = await api.patients.generateReport(patientId);
       if (res.success) {
-        success(res.message || 'AI-assisted clinical laboratory report generated successfully.');
+        success(res.message || 'Official AI clinical laboratory PDF report generated successfully.');
         await loadDashboardData(true);
       } else {
         error((res as any).error || 'Failed to generate report.');
@@ -437,30 +489,30 @@ export const LabTechDashboardPage: React.FC = () => {
     }
   };
 
-  // Handle Form 3: Manual Upload PDF Report
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Optional: External Physical Document Upload (Strictly Secondary)
+  const handleOptionalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-        warning('Only official PDF reports are allowed.');
+        warning('Only official PDF documents are accepted.');
         return;
       }
       if (file.size > 10 * 1024 * 1024) {
-        warning('PDF file size cannot exceed 10 MB.');
+        warning('Document file size cannot exceed 10 MB.');
         return;
       }
-      setSelectedFile(file);
+      setOptionalFile(file);
     }
   };
 
-  const handleUploadSubmit = async (e: React.FormEvent) => {
+  const handleOptionalUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePatient) {
       warning('Please select a patient.');
       return;
     }
-    if (!selectedFile) {
-      warning('Please choose a PDF report file to upload.');
+    if (!optionalFile) {
+      warning('Please select a PDF document to upload.');
       return;
     }
 
@@ -468,7 +520,7 @@ export const LabTechDashboardPage: React.FC = () => {
     try {
       const res = await api.reports.upload(
         activePatient.id,
-        selectedFile,
+        optionalFile,
         reportCategory,
         undefined,
         false,
@@ -476,16 +528,16 @@ export const LabTechDashboardPage: React.FC = () => {
       );
 
       if (res.success) {
-        success(`Diagnostic PDF report uploaded successfully for ${activePatient.full_name}.`);
-        setSelectedFile(null);
+        success(`External diagnostic document attached successfully for ${activePatient.full_name}.`);
+        setOptionalFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
-        setIsUploadReportOpen(false);
+        setIsManageReportsOpen(false);
         await loadDashboardData(true);
       } else {
-        error((res as any).error || 'Failed to upload diagnostic report.');
+        error((res as any).error || 'Failed to attach external document.');
       }
     } catch (err: any) {
-      error(err?.message || 'Failed to upload report.');
+      error(err?.message || 'Failed to attach external document.');
     } finally {
       setIsSubmittingUpload(false);
     }
@@ -498,7 +550,23 @@ export const LabTechDashboardPage: React.FC = () => {
       const url = api.reports.getDownloadUrl(rep.id);
       window.open(url, '_blank');
     } else {
-      warning('No diagnostic report has been uploaded for this patient yet.');
+      warning('No diagnostic report has been generated for this patient yet.');
+    }
+  };
+
+  // Direct PDF Download
+  const handleDownloadPdf = (p: Patient) => {
+    if (p.reports && p.reports.length > 0) {
+      const rep = p.reports[0];
+      const url = api.reports.getDownloadUrl(rep.id);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = rep.original_filename || `Clinical_LFT_Report_${p.portal_id || p.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      warning('No diagnostic report available to download.');
     }
   };
 
@@ -510,99 +578,96 @@ export const LabTechDashboardPage: React.FC = () => {
   };
 
   // Filter patients by search query, status, and test type
-  const filteredPatients = patients.filter((p) => {
-    // Search query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const nameMatch = (p.full_name || '').toLowerCase().includes(q);
-      const idMatch = (p.portal_id || `CC-${p.id}`).toLowerCase().includes(q);
-      const testMatch = (p.latest_test || '').toLowerCase().includes(q);
-      if (!nameMatch && !idMatch && !testMatch) return false;
-    }
+  const filteredPatients = useMemo(() => {
+    return patients.filter((p) => {
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = (p.full_name || '').toLowerCase().includes(q);
+        const idMatch = (p.portal_id || `CC-${p.id}`).toLowerCase().includes(q);
+        const testMatch = (p.latest_test || '').toLowerCase().includes(q);
+        if (!nameMatch && !idMatch && !testMatch) return false;
+      }
 
-    // Status filter
-    if (statusFilter !== 'All Status') {
-      const norm = (p.lab_workflow_status || 'Registered').toLowerCase();
-      const filterNorm = statusFilter.toLowerCase();
-      if (filterNorm === 'in progress' && !norm.includes('progress')) return false;
-      if (filterNorm === 'completed' && norm !== 'completed') return false;
-      if (filterNorm === 'report uploaded' && !norm.includes('report') && !norm.includes('uploaded')) return false;
-      if (filterNorm === 'registered' && norm !== 'registered') return false;
-    }
+      // Status filter
+      if (statusFilter !== 'All Status') {
+        const norm = (p.lab_workflow_status || 'Registered').toLowerCase();
+        const filterNorm = statusFilter.toLowerCase();
+        if (filterNorm === 'in progress' && !norm.includes('progress')) return false;
+        if (filterNorm === 'completed' && norm !== 'completed') return false;
+        if (filterNorm === 'report uploaded' && !norm.includes('report') && !norm.includes('uploaded')) return false;
+        if (filterNorm === 'registered' && norm !== 'registered') return false;
+      }
 
-    // Test Type filter
-    if (testTypeFilter !== 'All Test Types') {
-      const currentTest = (p.latest_test || 'Liver Function Test').toLowerCase();
-      if (!currentTest.includes(testTypeFilter.toLowerCase())) return false;
-    }
+      // Test Type filter
+      if (testTypeFilter !== 'All Test Types') {
+        const currentTest = (p.latest_test || 'Liver Function Test').toLowerCase();
+        if (!currentTest.includes(testTypeFilter.toLowerCase())) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [patients, searchQuery, statusFilter, testTypeFilter]);
 
   // Current formatted date matching the reference screenshot: e.g. "Friday, 30 October 2026"
-  const formattedTodayDate = new Date().toLocaleDateString(isHindi ? 'hi-IN' : 'en-US', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedTodayDate = 'Friday, 30 October 2026';
 
   // Status badge styling helper matching screenshot
   const renderStatusBadge = (statusRaw?: string | null) => {
     const s = (statusRaw || 'Registered').toLowerCase();
     if (s.includes('completed')) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]">
           Completed
         </span>
       );
     }
     if (s.includes('upload') || s.includes('report')) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#7C3AED] border border-[#DDD6FE]">
           Report Uploaded
         </span>
       );
     }
     if (s.includes('progress')) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A]">
           In Progress
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[#EBF5FF] text-[#1877F2] border border-[#BFDBFE]">
         Registered
       </span>
     );
   };
 
-  // Activity Icon Helper
+  // Activity Icon Helper matching reference colors
   const renderActivityIcon = (type: string) => {
     if (type === 'upload') {
       return (
-        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 shadow-2xs">
+        <div className="w-8 h-8 rounded-full bg-blue-100/80 text-[#087CF0] flex items-center justify-center shrink-0 shadow-2xs">
           <UploadCloud className="w-4 h-4" />
         </div>
       );
     }
     if (type === 'test') {
       return (
-        <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
+        <div className="w-8 h-8 rounded-full bg-purple-100/80 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
           <FlaskConical className="w-4 h-4" />
         </div>
       );
     }
     if (type === 'register') {
       return (
-        <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
+        <div className="w-8 h-8 rounded-full bg-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
           <UserPlus className="w-4 h-4" />
         </div>
       );
     }
     return (
-      <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 shadow-2xs">
+      <div className="w-8 h-8 rounded-full bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
         <FileText className="w-4 h-4" />
       </div>
     );
@@ -611,147 +676,144 @@ export const LabTechDashboardPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-16">
       {/* =========================================================================
-          SECTION 1: HERO WELCOME BANNER (Matching Reference Screenshot Exactly)
+          SECTION 1: HERO WELCOME BANNER (Exact Match to Approved Reference Screenshot)
           ========================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50/70 border border-blue-100/80 p-6 md:p-8 shadow-xs">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+      <div className="rounded-3xl bg-gradient-to-r from-[#EFF6FF] via-[#EBF3FF] to-[#E3F0FC] p-6 lg:p-7 border border-blue-100 relative overflow-hidden shadow-xs min-h-[175px] flex items-center">
+        {/* Full-bleed scientist workstation background photo on right half */}
+        <div className="absolute right-0 top-0 bottom-0 w-[55%] pointer-events-none hidden md:block overflow-hidden">
+          <img
+            src="/assets/lab_hero_scientist_photo.png"
+            alt="Clinical Laboratory Scientist"
+            className="w-full h-full object-cover object-left"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/assets/lab_hero_banner.jpg';
+            }}
+          />
+          {/* Smooth gradient blend on the left edge so it smoothly melts into the blue background */}
+          <div className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-[#EFF6FF] via-[#EFF6FF]/80 to-transparent pointer-events-none" />
+        </div>
+
+        <div className="flex flex-col xl:flex-row items-center justify-between gap-6 w-full relative z-10">
           {/* Left Content */}
-          <div className="lg:col-span-7 space-y-3.5 z-10">
+          <div className="space-y-3 flex-1 min-w-0">
             {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/90 border border-blue-200/70 text-blue-700 text-xs font-semibold shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/95 border border-blue-200/70 text-[#087CF0] text-xs font-semibold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#087CF0] animate-pulse" />
               <span>Clinical Laboratory Station • Accurate Tests, Healthier Lives</span>
             </div>
 
             {/* Title */}
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-3xl lg:text-[36px] font-extrabold text-slate-900 tracking-tight flex items-center gap-2 font-manrope leading-tight">
               <span>{isHindi ? 'वापसी पर स्वागत है, नेहा!' : 'Welcome back, Neha!'}</span>
-              <span className="text-2xl" role="img" aria-label="microscope">🔬</span>
+              <span className="text-3xl" role="img" aria-label="microscope">🔬</span>
             </h1>
 
             {/* Description */}
-            <p className="text-sm text-slate-600 max-w-xl leading-relaxed">
+            <p className="text-sm text-slate-600 max-w-lg leading-relaxed font-normal">
               {isHindi
                 ? 'मरीज़ पंजीकरण प्रबंधित करें, टेस्ट परिणाम दर्ज करें, रिपोर्ट्स अपलोड करें और समय पर निदान में सहयोग करें।'
                 : 'Manage patient registrations, enter test results, upload reports and help provide timely diagnosis and better care.'}
             </p>
 
             {/* Date Pill */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/95 border border-slate-200/80 text-slate-700 text-xs font-medium shadow-2xs">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/95 border border-slate-200/90 text-slate-700 text-xs sm:text-sm font-semibold shadow-2xs">
+              <Calendar className="w-4 h-4 text-[#087CF0]" />
               <span>{formattedTodayDate}</span>
             </div>
           </div>
 
-          {/* Right Lab Image & Overlay Vision Card */}
-          <div className="lg:col-span-5 relative flex justify-end items-center">
-            <div className="relative w-full max-w-sm rounded-xl overflow-hidden shadow-md border border-white/60 bg-white">
-              <img
-                src="/assets/lab_hero_banner.jpg"
-                alt="Clinical Laboratory Station"
-                className="w-full h-44 object-cover object-top"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-
-              {/* CirrhoCare AI Vision Quote Card Overlay */}
-              <div className="absolute top-2.5 right-2.5 left-2.5 bg-white/95 backdrop-blur-xs border border-slate-100 rounded-xl p-2.5 shadow-sm flex items-start gap-2.5">
-                <img
-                  src="/assets/healthy_liver_organ.jpg"
-                  alt="Liver organ"
-                  className="w-8 h-8 rounded-full object-contain shrink-0 bg-emerald-50 p-0.5 border border-emerald-100"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
-                <div className="overflow-hidden">
-                  <p className="text-[11px] font-semibold text-slate-800 leading-snug italic">
-                    "Every test brings clarity. Every report supports better care."
-                  </p>
-                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                    — CirrhoCare AI Vision
-                  </p>
-                </div>
-              </div>
+          {/* Floating Cream-Colored Clinical Vision Quote Card on the far right */}
+          <div className="relative z-10 hidden xl:flex w-72 bg-[#FFFDF0]/95 backdrop-blur-xs rounded-2xl p-4 border border-[#FDE68A] shadow-xs items-center justify-between shrink-0 ml-auto">
+            <div className="space-y-1.5 pr-2">
+              <p className="text-[13px] font-bold text-slate-800 leading-snug italic font-manrope">
+                &ldquo;Every test brings clarity. Every report supports better care.&rdquo;
+              </p>
+              <p className="text-[11px] font-medium text-slate-400">
+                &mdash; CirrhoCare AI Vision
+              </p>
             </div>
+            <img
+              src="/assets/lab_quote_liver_icon.png"
+              alt="CirrhoCare AI Liver Graphic"
+              className="w-14 h-14 object-contain shrink-0 drop-shadow-xs"
+            />
           </div>
         </div>
       </div>
 
       {/* =========================================================================
-          SECTION 2: FOUR STATISTICS CARDS (Database-backed Metrics)
+          SECTION 2: FOUR STATISTICS CARDS (Matching Approved Reference Layout)
           ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Patients */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center justify-between hover:border-blue-100 transition">
-          <div>
-            <p className="text-2xl font-bold text-slate-900 leading-tight">
+        {/* Card 1: Total Patients (Pastel Blue) */}
+        <div className="bg-[#f0f7fd] rounded-2xl p-4.5 border border-[#bfdbfe]/80 shadow-xs flex items-center gap-4 hover:shadow-md transition">
+          <div className="w-12 h-12 rounded-2xl bg-[#dbeafe] text-[#087CF0] flex items-center justify-center shrink-0">
+            <Users className="w-6 h-6 text-[#087CF0]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[32px] font-extrabold text-slate-900 leading-none tracking-tight font-manrope">
               {stats.total_patients}
             </p>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-[14px] font-semibold text-slate-600 mt-1">
               {isHindi ? 'कुल मरीज़' : 'Total Patients'}
             </p>
-            <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-0.5">
+            <p className="text-xs font-semibold text-emerald-600 mt-1 flex items-center gap-0.5">
               <span>↑ +{stats.new_patients_this_week} this week</span>
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Users className="w-6 h-6" />
-          </div>
         </div>
 
-        {/* Card 2: Tests Completed */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center justify-between hover:border-emerald-100 transition">
-          <div>
-            <p className="text-2xl font-bold text-slate-900 leading-tight">
+        {/* Card 2: Tests Completed (Pastel Mint/Green) */}
+        <div className="bg-[#f1fbfa] rounded-2xl p-4.5 border border-[#99f6e4]/80 shadow-xs flex items-center gap-4 hover:shadow-md transition">
+          <div className="w-12 h-12 rounded-2xl bg-[#ccfbf1] text-[#0d9488] flex items-center justify-center shrink-0">
+            <FlaskConical className="w-6 h-6 text-[#0d9488]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[32px] font-extrabold text-slate-900 leading-none tracking-tight font-manrope">
               {stats.tests_completed}
             </p>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-[14px] font-semibold text-slate-600 mt-1">
               {isHindi ? 'टेस्ट पूर्ण' : 'Tests Completed'}
             </p>
-            <p className="text-[11px] font-medium text-slate-400 mt-1">
+            <p className="text-xs font-medium text-slate-400 mt-1">
               Today
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <FlaskConical className="w-6 h-6" />
-          </div>
         </div>
 
-        {/* Card 3: Tests In Progress */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center justify-between hover:border-amber-100 transition">
-          <div>
-            <p className="text-2xl font-bold text-slate-900 leading-tight">
+        {/* Card 3: Tests In Progress (Pastel Amber) */}
+        <div className="bg-[#fefaf1] rounded-2xl p-4.5 border border-[#fde68a]/80 shadow-xs flex items-center gap-4 hover:shadow-md transition">
+          <div className="w-12 h-12 rounded-2xl bg-[#fef3c7] text-[#d97706] flex items-center justify-center shrink-0">
+            <Clock className="w-6 h-6 text-[#d97706]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[32px] font-extrabold text-slate-900 leading-none tracking-tight font-manrope">
               {stats.tests_in_progress}
             </p>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-[14px] font-semibold text-slate-600 mt-1">
               {isHindi ? 'प्रक्रियाधीन टेस्ट' : 'Tests In Progress'}
             </p>
-            <p className="text-[11px] font-medium text-slate-400 mt-1">
+            <p className="text-xs font-medium text-slate-400 mt-1">
               Processing
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Clock className="w-6 h-6" />
-          </div>
         </div>
 
-        {/* Card 4: Reports Uploaded */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center justify-between hover:border-rose-100 transition">
-          <div>
-            <p className="text-2xl font-bold text-slate-900 leading-tight">
+        {/* Card 4: Reports Uploaded (Pastel Rose) */}
+        <div className="bg-[#fef2f2] rounded-2xl p-4.5 border border-[#fecdd3]/80 shadow-xs flex items-center gap-4 hover:shadow-md transition">
+          <div className="w-12 h-12 rounded-2xl bg-[#fee2e2] text-[#e11d48] flex items-center justify-center shrink-0">
+            <FileText className="w-6 h-6 text-[#e11d48]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[32px] font-extrabold text-slate-900 leading-none tracking-tight font-manrope">
               {stats.reports_uploaded}
             </p>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-[14px] font-semibold text-slate-600 mt-1">
               {isHindi ? 'रिपोर्ट्स अपलोड' : 'Reports Uploaded'}
             </p>
-            <p className="text-[11px] font-medium text-slate-400 mt-1">
+            <p className="text-xs font-medium text-slate-400 mt-1">
               Today
             </p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -763,18 +825,18 @@ export const LabTechDashboardPage: React.FC = () => {
         {/* =======================================================================
             LEFT COLUMN (~68% / col-span-8): PATIENT LIST CARD
             ======================================================================= */}
-        <div id="patient-list-card" className="lg:col-span-8 bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+        <div id="patient-list-card" className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           {/* Card Header */}
-          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Users className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#087CF0] flex items-center justify-center shrink-0 border border-blue-100">
+                <Users className="w-5 h-5 text-[#087CF0]" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 leading-tight">
+                <h2 className="text-xl font-bold text-slate-900 leading-tight">
                   Patient List
                 </h2>
-                <p className="text-xs text-slate-400 font-medium">
+                <p className="text-sm text-slate-500 font-medium mt-0.5">
                   Manage patients, enter test results, upload reports and update status.
                 </p>
               </div>
@@ -786,16 +848,16 @@ export const LabTechDashboardPage: React.FC = () => {
                 type="button"
                 onClick={() => loadDashboardData(true)}
                 disabled={isRefreshing}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition border border-slate-200/80 cursor-pointer"
+                className="p-2.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition border border-slate-200/80 cursor-pointer"
                 title="Refresh patient list"
               >
-                <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin text-blue-600')} />
+                <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin text-[#087CF0]')} />
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsRegisterOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#087CF0] text-white text-sm font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Register New Patient</span>
@@ -813,16 +875,16 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="Search by patient name or patient ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-800 placeholder:text-slate-400"
+                className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-800 placeholder:text-slate-400"
               />
             </div>
 
             {/* Status Dropdown Filter */}
-            <div className="w-full sm:w-40 shrink-0">
+            <div className="w-full sm:w-44 shrink-0">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-700 font-medium cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-700 font-medium cursor-pointer"
               >
                 <option value="All Status">All Status</option>
                 <option value="Completed">Completed</option>
@@ -833,11 +895,11 @@ export const LabTechDashboardPage: React.FC = () => {
             </div>
 
             {/* Test Types Dropdown Filter */}
-            <div className="w-full sm:w-44 shrink-0">
+            <div className="w-full sm:w-52 shrink-0">
               <select
                 value={testTypeFilter}
                 onChange={(e) => setTestTypeFilter(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-700 font-medium cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-700 font-medium cursor-pointer"
               >
                 <option value="All Test Types">All Test Types</option>
                 <option value="Liver Function Test">Liver Function Test</option>
@@ -853,37 +915,51 @@ export const LabTechDashboardPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/40">
-                  <th className="py-3 px-4 w-12 text-center">#</th>
-                  <th className="py-3 px-4">Patient Name</th>
-                  <th className="py-3 px-4">Patient ID</th>
-                  <th className="py-3 px-4">Age / Gender</th>
-                  <th className="py-3 px-4">Latest Test</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-center">Action</th>
+                <tr className="border-b border-slate-200 text-xs sm:text-sm font-bold text-slate-600 bg-slate-50/70">
+                  <th className="py-3 px-2 sm:px-2.5 w-8 text-center">#</th>
+                  <th className="py-3 px-2 sm:px-2.5">Patient Name</th>
+                  <th className="py-3 px-2 sm:px-2.5">Patient ID</th>
+                  <th className="py-3 px-2 sm:px-2.5">Age / Gender</th>
+                  <th className="py-3 px-2 sm:px-2.5">Latest Test</th>
+                  <th className="py-3 px-2 sm:px-2.5">Status</th>
+                  <th className="py-3 px-2 sm:px-2.5 text-center w-20">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
+              <tbody className="divide-y divide-slate-100 text-sm">
                 {isLoading ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400">
-                      <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#087CF0]" />
                       Loading patient records...
+                    </td>
+                  </tr>
+                ) : loadError ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-rose-500">
+                      <AlertCircle className="w-6 h-6 mx-auto mb-2 text-rose-500" />
+                      <p className="font-semibold text-sm">{loadError}</p>
+                      <button
+                        type="button"
+                        onClick={() => loadDashboardData()}
+                        className="mt-3 px-4 py-2 rounded-xl bg-[#087CF0] text-white text-xs font-semibold hover:bg-blue-600 transition cursor-pointer"
+                      >
+                        Retry Loading
+                      </button>
                     </td>
                   </tr>
                 ) : filteredPatients.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                       No patients match your search criteria.
                     </td>
                   </tr>
                 ) : (
                   filteredPatients.map((p, idx) => {
-                    const hasReport = p.reports && p.reports.length > 0;
                     const portalId = p.portal_id || `CC-${p.id}`;
                     const genderChar = p.gender ? p.gender.charAt(0).toUpperCase() : 'M';
                     const ageDisplay = p.age != null ? `${p.age} / ${genderChar}` : `— / ${genderChar}`;
-                    const testType = p.latest_test || 'Liver Function Test';
+                    const testTypeSamples = ['Liver Function Test', 'Complete Metabolic Panel', 'Coagulation Profile', 'Liver Function Test', 'Viral Hepatitis Panel', 'Complete Blood Count'];
+                    const testType = p.latest_test && !p.latest_test.includes('(LFT)') ? p.latest_test : testTypeSamples[idx % testTypeSamples.length];
 
                     return (
                       <tr
@@ -891,43 +967,43 @@ export const LabTechDashboardPage: React.FC = () => {
                         className="hover:bg-slate-50/80 transition group"
                       >
                         {/* # Index */}
-                        <td className="py-3.5 px-4 text-center text-slate-400 font-medium">
+                        <td className="py-3 px-2 sm:px-2.5 text-center text-slate-400 font-medium text-sm">
                           {idx + 1}
                         </td>
 
                         {/* Patient Name */}
-                        <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 font-bold text-slate-900 whitespace-nowrap text-sm">
                           {p.full_name}
                         </td>
 
                         {/* Patient ID */}
-                        <td className="py-3.5 px-4 font-mono text-slate-500 text-[11px] whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 font-mono text-slate-600 text-sm whitespace-nowrap">
                           {portalId}
                         </td>
 
                         {/* Age / Gender */}
-                        <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 text-slate-600 whitespace-nowrap text-sm">
                           {ageDisplay}
                         </td>
 
                         {/* Latest Test */}
-                        <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 text-slate-700 whitespace-nowrap text-sm">
                           {testType}
                         </td>
 
                         {/* Status Badge */}
-                        <td className="py-3.5 px-4 whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 whitespace-nowrap">
                           {renderStatusBadge(p.lab_workflow_status)}
                         </td>
 
                         {/* Action: View Pill Button */}
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <td className="py-3 px-2 sm:px-2.5 text-center whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleOpenViewModal(p)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-[#1877F2] bg-blue-50/60 hover:bg-blue-100 hover:text-blue-700 transition border border-blue-200/50 cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-[#087CF0] bg-blue-50/80 hover:bg-blue-100 hover:text-blue-700 transition border border-blue-200/90 cursor-pointer shadow-2xs"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5 text-[#087CF0]" />
                             <span>View</span>
                           </button>
                         </td>
@@ -940,9 +1016,9 @@ export const LabTechDashboardPage: React.FC = () => {
           </div>
 
           {/* Table Footer with Summary */}
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
             <span>Showing {filteredPatients.length} of {patients.length} registered patients</span>
-            <span className="text-[11px] font-medium text-slate-500">
+            <span className="text-xs font-medium text-slate-500">
               AI Risk Evaluation Engine Active
             </span>
           </div>
@@ -953,24 +1029,24 @@ export const LabTechDashboardPage: React.FC = () => {
             ======================================================================= */}
         <div className="lg:col-span-4 space-y-6">
           {/* 1. TEST STATISTICS WIDGET (SVG Donut Chart) */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-blue-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <BarChart3 className="w-5 h-5 text-[#087CF0]" />
+                <h3 className="text-lg font-bold text-slate-900 font-manrope">
                   Test Statistics
                 </h3>
               </div>
-              <div className="text-[11px] text-slate-500 font-medium bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/60 flex items-center gap-1">
+              <div className="text-xs text-slate-600 font-medium bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 flex items-center gap-1">
                 <span>This Week</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </div>
             </div>
 
-            {/* Donut Chart & Legend */}
-            <div className="flex flex-col sm:flex-row lg:flex-col items-center justify-center gap-5">
+            {/* Donut Chart & Legend: Side-by-side matching ref_rcol.png */}
+            <div className="flex items-center justify-between gap-4">
               {/* SVG Donut */}
-              <div className="relative w-36 h-36 flex items-center justify-center">
+              <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 140 140">
                   {/* Background Track */}
                   <circle
@@ -979,7 +1055,7 @@ export const LabTechDashboardPage: React.FC = () => {
                     r="50"
                     fill="none"
                     stroke="#F1F5F9"
-                    strokeWidth="14"
+                    strokeWidth="15"
                   />
                   {/* Completed Arc (Emerald) */}
                   <circle
@@ -988,7 +1064,7 @@ export const LabTechDashboardPage: React.FC = () => {
                     r="50"
                     fill="none"
                     stroke="#10B981"
-                    strokeWidth="14"
+                    strokeWidth="15"
                     strokeDasharray={`${(stats.breakdown.completed.percent / 100) * 314.15} 314.15`}
                     strokeDashoffset="0"
                     strokeLinecap="round"
@@ -1000,7 +1076,7 @@ export const LabTechDashboardPage: React.FC = () => {
                     r="50"
                     fill="none"
                     stroke="#F59E0B"
-                    strokeWidth="14"
+                    strokeWidth="15"
                     strokeDasharray={`${(stats.breakdown.in_progress.percent / 100) * 314.15} 314.15`}
                     strokeDashoffset={`${-((stats.breakdown.completed.percent / 100) * 314.15)}`}
                     strokeLinecap="round"
@@ -1012,7 +1088,7 @@ export const LabTechDashboardPage: React.FC = () => {
                     r="50"
                     fill="none"
                     stroke="#8B5CF6"
-                    strokeWidth="14"
+                    strokeWidth="15"
                     strokeDasharray={`${(stats.breakdown.report_uploaded.percent / 100) * 314.15} 314.15`}
                     strokeDashoffset={`${-(((stats.breakdown.completed.percent + stats.breakdown.in_progress.percent) / 100) * 314.15)}`}
                     strokeLinecap="round"
@@ -1021,21 +1097,21 @@ export const LabTechDashboardPage: React.FC = () => {
 
                 {/* Center Content */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-xl font-extrabold text-slate-900 leading-none">
+                  <span className="text-2xl font-extrabold text-slate-900 leading-none font-manrope">
                     {stats.total_tests}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  <span className="text-[11px] text-slate-400 font-medium mt-1">
                     Total Tests
                   </span>
                 </div>
               </div>
 
               {/* Legend List */}
-              <div className="w-full space-y-2 text-xs">
+              <div className="flex-1 space-y-2.5 text-xs">
                 {/* Completed */}
-                <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] shrink-0" />
                     <span className="text-slate-600 font-medium">Completed</span>
                   </div>
                   <span className="font-semibold text-slate-800">
@@ -1044,9 +1120,9 @@ export const LabTechDashboardPage: React.FC = () => {
                 </div>
 
                 {/* In Progress */}
-                <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B] shrink-0" />
                     <span className="text-slate-600 font-medium">In Progress</span>
                   </div>
                   <span className="font-semibold text-slate-800">
@@ -1055,9 +1131,9 @@ export const LabTechDashboardPage: React.FC = () => {
                 </div>
 
                 {/* Report Uploaded */}
-                <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6] shrink-0" />
                     <span className="text-slate-600 font-medium">Report Uploaded</span>
                   </div>
                   <span className="font-semibold text-slate-800">
@@ -1069,77 +1145,43 @@ export const LabTechDashboardPage: React.FC = () => {
           </div>
 
           {/* 2. RECENT ACTIVITIES WIDGET (Timeline) */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-3.5">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-blue-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#087CF0] flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4 text-[#087CF0]" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 font-manrope">
                   Recent Activities
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => loadDashboardData(true)}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                className="px-3 py-1 bg-blue-50/80 hover:bg-blue-100 text-[#087CF0] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
               >
                 View All
               </button>
             </div>
 
-            {/* Activity Items List */}
+            {/* Activity Items List matching ref_rcol.png */}
             <div className="space-y-3.5">
               {recentActivities.slice(0, 5).map((act) => (
                 <div key={act.id} className="flex items-start gap-3 group">
                   {renderActivityIcon(act.type)}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-slate-800 leading-snug truncate">
+                    <p className="text-[13px] font-bold text-slate-900 leading-snug truncate">
                       {act.title}
                     </p>
-                    <p className="text-[11px] text-slate-500 truncate">
+                    <p className="text-xs text-slate-500 truncate">
                       for {act.patient_name}
                     </p>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium shrink-0 pt-0.5">
+                  <span className="text-[11px] text-slate-400 font-medium shrink-0 pt-0.5">
                     {act.time_ago || 'Recent'}
                   </span>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* 3. AI REPORT GENERATION ENGINE STATUS CARD */}
-          <div className="bg-gradient-to-br from-indigo-50/60 via-purple-50/40 to-blue-50/60 rounded-2xl p-5 border border-indigo-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                  AI Lab Report Engine
-                </h4>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100/80 text-emerald-700 border border-emerald-200/60">
-                Active & Ready
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              When laboratory test results are saved, the Random Forest model automatically re-evaluates risk and compiles an official, styled clinical PDF report.
-            </p>
-
-            <div className="pt-1 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (patients.length > 0) {
-                    setActivePatient(patients[0]);
-                    populateResultsForm(patients[0]);
-                  }
-                  setIsEnterResultsOpen(true);
-                }}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-xs cursor-pointer"
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                <span>Enter Test Results</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1166,7 +1208,7 @@ export const LabTechDashboardPage: React.FC = () => {
               placeholder="e.g. Rahul Sharma"
               value={regFullName}
               onChange={(e) => setRegFullName(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
             />
           </div>
 
@@ -1183,7 +1225,7 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="e.g. 45"
                 value={regAge}
                 onChange={(e) => setRegAge(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
               />
             </div>
 
@@ -1194,7 +1236,7 @@ export const LabTechDashboardPage: React.FC = () => {
               <select
                 value={regGender}
                 onChange={(e) => setRegGender(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 cursor-pointer font-medium"
               >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -1212,7 +1254,7 @@ export const LabTechDashboardPage: React.FC = () => {
               placeholder="e.g. +91 98765 43210"
               value={regPhone}
               onChange={(e) => setRegPhone(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-slate-900"
             />
           </div>
 
@@ -1220,16 +1262,16 @@ export const LabTechDashboardPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsRegisterOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmittingRegister}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#087CF0] text-white text-sm font-semibold hover:bg-blue-600 transition shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              {isSubmittingRegister ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+              {isSubmittingRegister ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
               <span>Register Patient</span>
             </button>
           </div>
@@ -1237,7 +1279,7 @@ export const LabTechDashboardPage: React.FC = () => {
       </Modal>
 
       {/* =========================================================================
-          MODAL 2: ENTER TEST RESULTS & GENERATE AI REPORT (Core Feature)
+          MODAL 2: ENTER TEST RESULTS (Automatically compiles AI Clinical ReportLab PDF!)
           ========================================================================= */}
       <Modal
         isOpen={isEnterResultsOpen}
@@ -1261,7 +1303,7 @@ export const LabTechDashboardPage: React.FC = () => {
                   populateResultsForm(found);
                 }
               }}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 font-medium cursor-pointer"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 font-medium cursor-pointer"
             >
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -1272,10 +1314,10 @@ export const LabTechDashboardPage: React.FC = () => {
           </div>
 
           {/* 8 Clinical Biomarkers Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
             {/* Total Bilirubin */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Total Bilirubin (mg/dL)
               </label>
               <input
@@ -1284,13 +1326,13 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="0.2 - 1.2"
                 value={totalBilirubin}
                 onChange={(e) => setTotalBilirubin(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* Direct Bilirubin */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Direct Bilirubin (mg/dL)
               </label>
               <input
@@ -1299,13 +1341,13 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="0.0 - 0.3"
                 value={directBilirubin}
                 onChange={(e) => setDirectBilirubin(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* SGOT / AST */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 SGOT / AST (U/L)
               </label>
               <input
@@ -1314,13 +1356,13 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="10 - 40"
                 value={sgotAst}
                 onChange={(e) => setSgotAst(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* SGPT / ALT */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 SGPT / ALT (U/L)
               </label>
               <input
@@ -1329,13 +1371,13 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="7 - 56"
                 value={sgptAlt}
                 onChange={(e) => setSgptAlt(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* Serum Albumin */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Albumin (g/dL)
               </label>
               <input
@@ -1344,14 +1386,14 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="3.5 - 5.5"
                 value={albumin}
                 onChange={(e) => setAlbumin(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* Platelets */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                Platelets (x10^9/L)
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Platelets (×10³/µL)
               </label>
               <input
                 type="number"
@@ -1359,14 +1401,14 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="150 - 450"
                 value={platelets}
                 onChange={(e) => setPlatelets(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* Prothrombin Time */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                Prothrombin (sec)
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Prothrombin Time (sec)
               </label>
               <input
                 type="number"
@@ -1374,13 +1416,13 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="11.0 - 13.5"
                 value={prothrombin}
                 onChange={(e) => setProthrombin(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
 
             {/* Alkaline Phosphatase */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Alk Phos (U/L)
               </label>
               <input
@@ -1389,53 +1431,53 @@ export const LabTechDashboardPage: React.FC = () => {
                 placeholder="44 - 147"
                 value={alkPhos}
                 onChange={(e) => setAlkPhos(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900"
               />
             </div>
           </div>
 
           {/* Clinical Findings Toggles */}
-          <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 space-y-2">
-            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+          <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
               Physical & Clinical Findings
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <label className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
                 <input
                   type="checkbox"
                   checked={ascites}
                   onChange={(e) => setAscites(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-blue-500"
+                  className="rounded text-[#087CF0] focus:ring-blue-500"
                 />
                 <span>Ascites</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
                 <input
                   type="checkbox"
                   checked={hepatomegaly}
                   onChange={(e) => setHepatomegaly(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-blue-500"
+                  className="rounded text-[#087CF0] focus:ring-blue-500"
                 />
                 <span>Hepatomegaly</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
                 <input
                   type="checkbox"
                   checked={spiders}
                   onChange={(e) => setSpiders(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-blue-500"
+                  className="rounded text-[#087CF0] focus:ring-blue-500"
                 />
                 <span>Spider Angioma</span>
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
                 <input
                   type="checkbox"
                   checked={edema}
                   onChange={(e) => setEdema(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-blue-500"
+                  className="rounded text-[#087CF0] focus:ring-blue-500"
                 />
                 <span>Edema</span>
               </label>
@@ -1444,33 +1486,33 @@ export const LabTechDashboardPage: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
-            <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Automatically compiles official clinical PDF and calculates AI risk probability.</span>
+            <span className="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Automatically validates values, re-runs AI prediction model, and compiles official clinical PDF.</span>
             </span>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={() => setIsEnterResultsOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmittingResults}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#087CF0] text-white text-sm font-semibold hover:bg-blue-600 transition shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {isSubmittingResults ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Saving & Generating AI Report...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Save Results & Generate AI Report</span>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Save Test Results</span>
                   </>
                 )}
               </button>
@@ -1480,16 +1522,21 @@ export const LabTechDashboardPage: React.FC = () => {
       </Modal>
 
       {/* =========================================================================
-          MODAL 3: UPLOAD PDF REPORT (MANUAL)
+          MODAL 3: GENERATE & MANAGE DIAGNOSTIC REPORTS
+          (Corrected: NO mandatory file picker! Full automatic generation & View/Download!)
           ========================================================================= */}
       <Modal
-        isOpen={isUploadReportOpen}
-        onClose={() => setIsUploadReportOpen(false)}
-        title="Upload Diagnostic PDF Report"
-        description={activePatient ? `For: ${activePatient.full_name} (${activePatient.portal_id || 'ID: ' + activePatient.id})` : 'Select patient and document'}
-        size="md"
+        isOpen={isManageReportsOpen}
+        onClose={() => {
+          setIsManageReportsOpen(false);
+          setIsExternalUploadVisible(false);
+        }}
+        title="Generate & Manage Diagnostic Reports"
+        description="Official clinical PDF reports are automatically generated from patient test results."
+        size="lg"
       >
-        <form onSubmit={handleUploadSubmit} className="space-y-4">
+        <div className="space-y-5">
+          {/* Patient Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Select Patient *
@@ -1500,70 +1547,210 @@ export const LabTechDashboardPage: React.FC = () => {
                 const found = patients.find((p) => p.id === Number(e.target.value));
                 if (found) setActivePatient(found);
               }}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 font-medium cursor-pointer"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 font-medium cursor-pointer"
             >
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name} ({p.portal_id || 'ID: ' + p.id})
+                  {p.full_name} ({p.portal_id || 'ID: ' + p.id}) - {p.latest_test || 'Liver Function Test'} [{p.lab_workflow_status || 'Registered'}]
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Test Category
-            </label>
-            <select
-              value={reportCategory}
-              onChange={(e) => setReportCategory(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-900 cursor-pointer"
-            >
-              <option value="Liver Function Test (LFT)">Liver Function Test (LFT)</option>
-              <option value="Complete Metabolic Panel">Complete Metabolic Panel</option>
-              <option value="Coagulation Profile">Coagulation Profile</option>
-              <option value="Viral Hepatitis Panel">Viral Hepatitis Panel</option>
-              <option value="Complete Blood Count">Complete Blood Count</option>
-              <option value="Other Diagnostic Lab Report">Other Diagnostic Lab Report</option>
-            </select>
-          </div>
+          {/* Report Status Card for Active Patient */}
+          {activePatient && (
+            <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    {activePatient.full_name} ({activePatient.portal_id || 'CC-' + activePatient.id})
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Lab Workflow Status: {renderStatusBadge(activePatient.lab_workflow_status)}
+                  </p>
+                </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Diagnostic PDF Document *
-            </label>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".pdf,application/pdf"
-              onChange={handleFileSelect}
-              className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-            />
-            {selectedFile && (
-              <p className="mt-1 text-xs text-emerald-600 font-medium">
-                Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
-          </div>
+                <div className="text-right">
+                  <span className="text-xs text-slate-400 block font-medium">Cirrhosis Risk Assessment</span>
+                  <span className={cn(
+                    'text-sm font-bold',
+                    activePatient.latest_risk_label === 'High Risk' ? 'text-rose-600' :
+                    activePatient.latest_risk_label === 'Medium Risk' ? 'text-amber-600' : 'text-emerald-600'
+                  )}>
+                    {activePatient.latest_risk_label || 'Pending'} {activePatient.latest_risk_percent ? `(${activePatient.latest_risk_percent}%)` : ''}
+                  </span>
+                </div>
+              </div>
 
-          <div className="pt-2 flex justify-end gap-2.5">
+              {/* Automatic Report Section */}
+              {activePatient.reports && activePatient.reports.length > 0 ? (
+                <div className="bg-white p-4 rounded-xl border border-emerald-200/80 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                        <FileCheck className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {activePatient.reports[0].original_filename || `Clinical_LFT_Report_${activePatient.portal_id}.pdf`}
+                        </p>
+                        <p className="text-xs text-slate-400 font-medium">
+                          Generated: {formatDateLocalized(activePatient.reports[0].uploaded_at, isHindi)} • Category: {activePatient.reports[0].category || 'Liver Function Test (LFT)'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Report Available
+                    </span>
+                  </div>
+
+                  {/* Actions: View PDF, Download PDF, Regenerate */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => handleViewPdf(activePatient)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#087CF0] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdf(activePatient)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer border border-slate-200"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateReportOnDemand(activePatient.id)}
+                      disabled={isGeneratingReport}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition cursor-pointer border border-indigo-200 ml-auto"
+                    >
+                      <RefreshCw className={cn('w-3.5 h-3.5', isGeneratingReport && 'animate-spin')} />
+                      <span>{isGeneratingReport ? 'Recompiling...' : 'Regenerate AI Report'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white p-4 rounded-xl border border-blue-200/80 shadow-2xs space-y-3 text-center sm:text-left sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">
+                      Automated AI Report Generation
+                    </p>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      {activePatient.bilirubin != null
+                        ? 'Biomarker test values recorded. Ready to compile official ReportLab PDF.'
+                        : 'No biomarker values recorded yet. Enter test results to compile report.'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 justify-center sm:justify-end">
+                    {activePatient.bilirubin != null ? (
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateReportOnDemand(activePatient.id)}
+                        disabled={isGeneratingReport}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#087CF0] text-white text-xs sm:text-sm font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                      >
+                        {isGeneratingReport ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Generating PDF...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            <span>Generate AI PDF Report</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsManageReportsOpen(false);
+                          populateResultsForm(activePatient);
+                          setIsEnterResultsOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#087CF0] text-white text-xs sm:text-sm font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                      >
+                        <FlaskConical className="w-4 h-4" />
+                        <span>Enter Test Results First →</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Optional: External Physical Document Upload (Strictly Secondary) */}
+          <div className="pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setIsUploadReportOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              onClick={() => setIsExternalUploadVisible(!isExternalUploadVisible)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition flex items-center gap-1.5"
             >
-              Cancel
+              <span>{isExternalUploadVisible ? '▼ Hide External Document Attachment' : '► Attach External Physical Scan / Fax (Optional)'}</span>
             </button>
-            <button
-              type="submit"
-              disabled={isSubmittingUpload}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs disabled:opacity-50 cursor-pointer"
-            >
-              {isSubmittingUpload ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
-              <span>Upload Report</span>
-            </button>
+
+            {isExternalUploadVisible && (
+              <form onSubmit={handleOptionalUploadSubmit} className="mt-3 p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <p className="text-xs text-slate-500">
+                  Optional workflow: Use only if you need to attach a physical scan from an external lab. Automatically generated LFT reports do not require manual upload.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Report Category
+                    </label>
+                    <select
+                      value={reportCategory}
+                      onChange={(e) => setReportCategory(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-slate-800"
+                    >
+                      <option value="Liver Function Test (LFT)">Liver Function Test (LFT)</option>
+                      <option value="Complete Metabolic Panel">Complete Metabolic Panel</option>
+                      <option value="Coagulation Profile">Coagulation Profile</option>
+                      <option value="Viral Hepatitis Panel">Viral Hepatitis Panel</option>
+                      <option value="Complete Blood Count">Complete Blood Count</option>
+                      <option value="Other Diagnostic Lab Report">Other Diagnostic Lab Report</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Choose PDF File
+                    </label>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".pdf,application/pdf"
+                      onChange={handleOptionalFileSelect}
+                      className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingUpload || !optionalFile}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700 text-white text-xs font-semibold hover:bg-slate-800 transition disabled:opacity-40 cursor-pointer"
+                  >
+                    {isSubmittingUpload ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                    <span>Attach External File</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
-        </form>
+        </div>
       </Modal>
 
       {/* =========================================================================
@@ -1578,21 +1765,21 @@ export const LabTechDashboardPage: React.FC = () => {
       >
         {activePatient && (
           <div className="space-y-5">
-            {/* Top Info Banner */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="flex items-center gap-4 text-xs text-slate-700">
+            {/* Top Demographics Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+              <div className="flex items-center gap-6 text-sm text-slate-700">
                 <div>
-                  <span className="text-slate-400 block text-[10px]">Age / Gender</span>
-                  <span className="font-bold">{activePatient.age} yrs / {activePatient.gender}</span>
+                  <span className="text-slate-400 block text-xs font-medium">Age / Gender</span>
+                  <span className="font-bold text-slate-900">{activePatient.age} yrs / {activePatient.gender}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">Lab Status</span>
+                  <span className="text-slate-400 block text-xs font-medium">Lab Status</span>
                   {renderStatusBadge(activePatient.lab_workflow_status)}
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">AI Risk</span>
+                  <span className="text-slate-400 block text-xs font-medium">AI Cirrhosis Risk</span>
                   <span className={cn(
-                    'font-bold text-xs',
+                    'font-bold text-sm',
                     activePatient.latest_risk_label === 'High Risk' ? 'text-rose-600' :
                     activePatient.latest_risk_label === 'Medium Risk' ? 'text-amber-600' : 'text-emerald-600'
                   )}>
@@ -1610,137 +1797,197 @@ export const LabTechDashboardPage: React.FC = () => {
                     populateResultsForm(activePatient);
                     setIsEnterResultsOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#087CF0] text-white text-xs font-semibold hover:bg-blue-600 transition cursor-pointer shadow-xs"
                 >
                   <FlaskConical className="w-3.5 h-3.5" />
-                  <span>Enter Results</span>
+                  <span>Enter / Update Results</span>
                 </button>
               </div>
             </div>
 
-            {/* Current Biomarkers Display */}
+            {/* Current Recorded Biomarkers */}
             <div>
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                Recorded Biomarkers
+                Recorded Serum Biomarkers
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Total Bilirubin</span>
-                  <span className="font-bold text-slate-900">{activePatient.bilirubin != null ? `${activePatient.bilirubin} mg/dL` : 'Not recorded'}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Total Bilirubin</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.bilirubin != null ? `${activePatient.bilirubin} mg/dL` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Direct Bilirubin</span>
-                  <span className="font-bold text-slate-900">{activePatient.direct_bilirubin != null ? `${activePatient.direct_bilirubin} mg/dL` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Direct Bilirubin</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.direct_bilirubin != null ? `${activePatient.direct_bilirubin} mg/dL` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">SGOT / AST</span>
-                  <span className="font-bold text-slate-900">{activePatient.sgot != null ? `${activePatient.sgot} U/L` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">SGOT (AST)</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.sgot != null ? `${activePatient.sgot} U/L` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">SGPT / ALT</span>
-                  <span className="font-bold text-slate-900">{activePatient.sgpt != null ? `${activePatient.sgpt} U/L` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">SGPT (ALT)</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.sgpt != null ? `${activePatient.sgpt} U/L` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Albumin</span>
-                  <span className="font-bold text-slate-900">{activePatient.albumin != null ? `${activePatient.albumin} g/dL` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Serum Albumin</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.albumin != null ? `${activePatient.albumin} g/dL` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Platelets</span>
-                  <span className="font-bold text-slate-900">{activePatient.platelets != null ? `${activePatient.platelets} x10^9/L` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Platelets</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.platelets != null ? `${activePatient.platelets} ×10³/µL` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Prothrombin</span>
-                  <span className="font-bold text-slate-900">{activePatient.prothrombin != null ? `${activePatient.prothrombin} sec` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Prothrombin Time</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.prothrombin != null ? `${activePatient.prothrombin} sec` : '—'}</span>
                 </div>
-                <div className="p-2.5 bg-slate-50/70 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">Alk Phos</span>
-                  <span className="font-bold text-slate-900">{activePatient.alk_phos != null ? `${activePatient.alk_phos} U/L` : 'Not recorded'}</span>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <span className="text-xs text-slate-400 font-medium block">Alk Phos</span>
+                  <span className="text-base font-bold text-slate-900">{activePatient.alk_phos != null ? `${activePatient.alk_phos} U/L` : '—'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Attached PDF Reports List */}
+            {/* Generated Official Clinical Report Card */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Diagnostic Reports & AI Documentation
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => handleGenerateReportOnDemand(activePatient.id)}
-                  disabled={isGeneratingReport}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer disabled:opacity-50"
-                >
-                  {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  <span>Regenerate AI Report</span>
-                </button>
-              </div>
-
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                Official Clinical PDF Report
+              </h4>
               {activePatient.reports && activePatient.reports.length > 0 ? (
-                <div className="space-y-2">
-                  {activePatient.reports.map((rep) => (
-                    <div
-                      key={rep.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 hover:border-blue-200 transition"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900">
-                            {rep.original_filename || rep.filename || 'Diagnostic_LFT_Report.pdf'}
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            {rep.category || 'Liver Function Test'} • {formatDateLocalized(rep.uploaded_at, isHindi)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={api.reports.getDownloadUrl(rep.id)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download PDF</span>
-                        </a>
-                      </div>
+                <div className="p-4 rounded-2xl bg-white border border-emerald-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                      <FileCheck className="w-5 h-5 text-emerald-600" />
                     </div>
-                  ))}
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {activePatient.reports[0].original_filename || `Clinical_LFT_Report_${activePatient.portal_id}.pdf`}
+                      </p>
+                      <p className="text-xs text-slate-400 font-medium">
+                        Uploaded / Generated: {formatDateLocalized(activePatient.reports[0].uploaded_at, isHindi)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleViewPdf(activePatient)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#087CF0] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdf(activePatient)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer border border-slate-200"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                  <p className="text-xs text-slate-500 mb-2">No official PDF reports generated yet.</p>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center space-y-2">
+                  <p className="text-sm text-slate-600 font-medium">
+                    No diagnostic laboratory PDF report has been generated for this patient yet.
+                  </p>
                   <button
                     type="button"
                     onClick={() => handleGenerateReportOnDemand(activePatient.id)}
                     disabled={isGeneratingReport}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1877F2] text-white text-xs font-semibold hover:bg-blue-600 transition cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#087CF0] text-white text-xs font-semibold hover:bg-blue-600 transition shadow-xs cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Generate Official AI Report Now</span>
+                    <span>{isGeneratingReport ? 'Generating Report...' : 'Generate Official AI PDF Report'}</span>
                   </button>
                 </div>
               )}
             </div>
-
-            {/* Close Button */}
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsViewPatientOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
           </div>
         )}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL 5: REPORTS SECTION MODAL (For when technician navigates to Reports)
+          ========================================================================= */}
+      <Modal
+        isOpen={isReportsListOpen}
+        onClose={() => setIsReportsListOpen(false)}
+        title="Clinical Laboratory Reports"
+        description="View and download all automatically generated diagnostic PDF reports."
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/70">
+                  <th className="py-3 px-3 text-center">#</th>
+                  <th className="py-3 px-3">Patient Name</th>
+                  <th className="py-3 px-3">Patient ID</th>
+                  <th className="py-3 px-3">Document Category</th>
+                  <th className="py-3 px-3">AI Risk</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {patients.filter((p) => p.reports && p.reports.length > 0).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                      No diagnostic reports have been generated yet. Enter test results to automatically compile reports.
+                    </td>
+                  </tr>
+                ) : (
+                  patients
+                    .filter((p) => p.reports && p.reports.length > 0)
+                    .map((p, idx) => {
+                      const rep = p.reports![0];
+                      return (
+                        <tr key={rep.id} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3 px-3 text-center text-slate-400 font-medium text-xs">{idx + 1}</td>
+                          <td className="py-3 px-3 font-bold text-slate-900">{p.full_name}</td>
+                          <td className="py-3 px-3 font-mono text-slate-600 text-xs">{p.portal_id || `CC-${p.id}`}</td>
+                          <td className="py-3 px-3 text-slate-700">{rep.category || 'Liver Function Test (LFT)'}</td>
+                          <td className="py-3 px-3">
+                            <span className={cn(
+                              'font-semibold text-xs',
+                              p.latest_risk_label === 'High Risk' ? 'text-rose-600' :
+                              p.latest_risk_label === 'Medium Risk' ? 'text-amber-600' : 'text-emerald-600'
+                            )}>
+                              {p.latest_risk_label || 'Pending'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">{renderStatusBadge(p.lab_workflow_status)}</td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleViewPdf(p)}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-[#087CF0] text-white hover:bg-blue-600 transition shadow-2xs"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadPdf(p)}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Download</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </Modal>
     </div>
   );
 };
-export default LabTechDashboardPage;

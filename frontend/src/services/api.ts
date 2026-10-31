@@ -110,6 +110,11 @@ class ApiClient {
         body: JSON.stringify({ token, password, confirm_password: confirmPassword }),
       }),
 
+    getOAuthStatus: () =>
+      this.request<{ success: boolean; google_enabled: boolean; google_client_id: string | null }>('/auth/oauth-status', {
+        method: 'GET',
+      }),
+
     patientLogin: (name: string, portal_id: string, rememberOrPin: boolean | string = false, optionalPin?: string) => {
       let remember = false;
       let pin: string | undefined = undefined;

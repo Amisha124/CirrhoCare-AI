@@ -321,6 +321,7 @@ export interface PatientDashboardData {
   portal_id: string;
   records_count: number;
   reports_count: number;
+  prescriptions_count?: number;
   unreviewed_reports_count?: number;
   reviewed_reports_count?: number;
   report_review_status?: string;

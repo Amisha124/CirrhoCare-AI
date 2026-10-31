@@ -773,12 +773,12 @@ export const HepatologistDashboardPage: React.FC = () => {
             </div>
 
             {/* Heading */}
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight mb-2 flex items-center gap-2">
+            <h1 className="text-3xl lg:text-[36px] font-extrabold text-slate-900 tracking-tight mb-2 flex items-center gap-2 font-manrope leading-tight">
               {t('Welcome back, Dr. Sharma! 👨‍⚕️', 'पुनः स्वागत है, डॉ. शर्मा! 👨‍⚕️')}
             </h1>
 
             {/* Description */}
-            <p className="text-slate-600 text-xs lg:text-sm leading-relaxed max-w-xl mb-4 font-normal">
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-xl mb-4 font-normal">
               {t(
                 'Review patient clinical details, AI risk predictions, lab results, and manage precision treatments.',
                 'मरीज़ के चिकित्सीय विवरण, एआई जोखिम पूर्वानुमान, लैब परिणामों की समीक्षा करें और सटीक उपचार प्रबंधित करें।'
@@ -836,60 +836,60 @@ export const HepatologistDashboardPage: React.FC = () => {
         {/* 1. Total Patients */}
         <div className="bg-[#eff6ff] border border-blue-100/90 rounded-2xl p-4.5 shadow-2xs transition hover:shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500">{t('Total Patients', 'कुल मरीज़')}</p>
-            <p className="text-2xl font-extrabold text-slate-900">{totalPatientsCount}</p>
-            <p className="text-[11px] text-blue-600 font-medium">{t('Registered in system', 'प्रणाली में पंजीकृत')}</p>
+            <p className="text-[14px] font-semibold text-slate-600">{t('Total Patients', 'कुल मरीज़')}</p>
+            <p className="text-[30px] lg:text-[32px] font-extrabold text-slate-900 font-manrope leading-none mt-1">{totalPatientsCount}</p>
+            <p className="text-[13px] text-blue-600 font-medium mt-1">{t('Registered in system', 'प्रणाली में पंजीकृत')}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-blue-100/80 text-[#1877F2] flex items-center justify-center shrink-0 shadow-2xs">
-            <Users className="w-5 h-5 text-[#1877F2]" />
+          <div className="w-12 h-12 rounded-2xl bg-blue-100/80 text-[#1877F2] flex items-center justify-center shrink-0 shadow-2xs">
+            <Users className="w-6 h-6 text-[#1877F2]" />
           </div>
         </div>
 
         {/* 2. High Risk Patients */}
         <div className="bg-[#fff1f2] border border-rose-100/90 rounded-2xl p-4.5 shadow-2xs transition hover:shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500">{t('High Risk Patients', 'उच्च जोखिम मरीज़')}</p>
-            <p className="text-2xl font-extrabold text-rose-700">{highRiskCount}</p>
-            <p className="text-[11px] text-rose-600 font-medium">{t('Requires close monitoring', 'सघन निगरानी आवश्यक')}</p>
+            <p className="text-[14px] font-semibold text-slate-600">{t('High Risk Patients', 'उच्च जोखिम मरीज़')}</p>
+            <p className="text-[30px] lg:text-[32px] font-extrabold text-rose-700 font-manrope leading-none mt-1">{highRiskCount}</p>
+            <p className="text-[13px] text-rose-600 font-medium mt-1">{t('Requires close monitoring', 'सघन निगरानी आवश्यक')}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs">
-            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          <div className="w-12 h-12 rounded-2xl bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs">
+            <AlertTriangle className="w-6 h-6 text-rose-600" />
           </div>
         </div>
 
         {/* 3. Medium Risk Patients */}
         <div className="bg-[#fffbeb] border border-amber-100/90 rounded-2xl p-4.5 shadow-2xs transition hover:shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500">{t('Medium Risk Patients', 'मध्यम जोखिम मरीज़')}</p>
-            <p className="text-2xl font-extrabold text-amber-700">{mediumRiskCount}</p>
-            <p className="text-[11px] text-amber-600 font-medium">{t('Regular review needed', 'नियमित समीक्षा अपेक्षित')}</p>
+            <p className="text-[14px] font-semibold text-slate-600">{t('Medium Risk Patients', 'मध्यम जोखिम मरीज़')}</p>
+            <p className="text-[30px] lg:text-[32px] font-extrabold text-amber-700 font-manrope leading-none mt-1">{mediumRiskCount}</p>
+            <p className="text-[13px] text-amber-600 font-medium mt-1">{t('Regular review needed', 'नियमित समीक्षा अपेक्षित')}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
-            <Activity className="w-5 h-5 text-amber-600" />
+          <div className="w-12 h-12 rounded-2xl bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
+            <Activity className="w-6 h-6 text-amber-600" />
           </div>
         </div>
 
         {/* 4. Low Risk Patients */}
         <div className="bg-[#f0fdf4] border border-emerald-100/90 rounded-2xl p-4.5 shadow-2xs transition hover:shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500">{t('Low Risk Patients', 'कम जोखिम मरीज़')}</p>
-            <p className="text-2xl font-extrabold text-emerald-700">{lowRiskCount}</p>
-            <p className="text-[11px] text-emerald-600 font-medium">{t('Stable clinical status', 'स्थिर नैदानिक स्थिति')}</p>
+            <p className="text-[14px] font-semibold text-slate-600">{t('Low Risk Patients', 'कम जोखिम मरीज़')}</p>
+            <p className="text-[30px] lg:text-[32px] font-extrabold text-emerald-700 font-manrope leading-none mt-1">{lowRiskCount}</p>
+            <p className="text-[13px] text-emerald-600 font-medium mt-1">{t('Stable clinical status', 'स्थिर नैदानिक स्थिति')}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
           </div>
         </div>
 
         {/* 5. Pending Appointments */}
         <div className="bg-[#faf5ff] border border-purple-100/90 rounded-2xl p-4.5 shadow-2xs transition hover:shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500">{t('Pending Appointments', 'लंबित अपॉइंटमेंट्स')}</p>
-            <p className="text-2xl font-extrabold text-purple-700">{pendingAppointmentsCount}</p>
-            <p className="text-[11px] text-purple-600 font-medium">{t('Awaiting consultation', 'परामर्श की प्रतीक्षा')}</p>
+            <p className="text-[14px] font-semibold text-slate-600">{t('Pending Appointments', 'लंबित अपॉइंटमेंट्स')}</p>
+            <p className="text-[30px] lg:text-[32px] font-extrabold text-purple-700 font-manrope leading-none mt-1">{pendingAppointmentsCount}</p>
+            <p className="text-[13px] text-purple-600 font-medium mt-1">{t('Awaiting consultation', 'परामर्श की प्रतीक्षा')}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-purple-100/80 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
-            <CalendarClock className="w-5 h-5 text-purple-600" />
+          <div className="w-12 h-12 rounded-2xl bg-purple-100/80 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
+            <CalendarClock className="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>

@@ -52,8 +52,8 @@ export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement> & {
   >
     {title ? (
       <div>
-        <h3 className="text-base font-bold text-slate-900 tracking-tight">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        <h3 className="text-[18px] sm:text-[19px] font-bold text-slate-900 tracking-tight font-manrope">{title}</h3>
+        {subtitle && <p className="text-[14px] text-slate-500 mt-1">{subtitle}</p>}
       </div>
     ) : (
       children
