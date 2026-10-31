@@ -383,6 +383,15 @@ def create_app(portal="admin", test_config=None):
 
     with app.app_context():
 
+        try:
+            from sqlalchemy import text
+            db.session.execute(text("SELECT 1"))
+            print(f"[CirrhoCare AI] Database Connection Verified: Connected to {db_target}")
+        except Exception as e:
+            print(f"[CirrhoCare AI] CRITICAL: Database connection check failed: {e}")
+            if getattr(Config, "is_render", False) or getattr(Config, "is_production", False):
+                raise RuntimeError(f"CRITICAL: Failed to connect to production database: {e}")
+
         db.create_all()
 
         ensure_sqlite_schema()

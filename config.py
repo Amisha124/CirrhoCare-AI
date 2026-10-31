@@ -13,12 +13,21 @@ class Config:
     DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1")
     DEMO_UPLOAD_FOLDER = Path(os.getenv("DEMO_UPLOAD_FOLDER", BASE_DIR / "instance" / "demo_uploads"))
     raw_db_url = os.getenv("DATABASE_URL")
+    is_render = bool(os.getenv("RENDER"))
+    is_production = os.getenv("FLASK_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
+
     if raw_db_url and (raw_db_url.strip().startswith("postgres://") or raw_db_url.strip().startswith("postgresql://")):
         db_url_clean = raw_db_url.strip()
         if db_url_clean.startswith("postgres://"):
             db_url_clean = "postgresql://" + db_url_clean[len("postgres://"):]
         SQLALCHEMY_DATABASE_URI = db_url_clean
         UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", DEMO_UPLOAD_FOLDER if DEMO_MODE else BASE_DIR / "instance" / "uploads"))
+    elif is_render or is_production:
+        raise RuntimeError(
+            "CRITICAL CONFIGURATION ERROR: Running in production / Render environment, "
+            "but DATABASE_URL is missing or not a valid PostgreSQL URI! "
+            "CirrhoCare AI refuses to silently fall back to ephemeral SQLite in production to prevent patient data loss."
+        )
     elif DEMO_MODE:
         SQLALCHEMY_DATABASE_URI = os.getenv(
             "DEMO_DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'demo_cirrhosis.db'}"

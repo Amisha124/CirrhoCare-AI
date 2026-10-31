@@ -165,13 +165,24 @@ def get_patient_eager_options(include_relations=False):
 @api_bp.get("/health")
 def api_health():
     from app.utils.demo_provisioning import is_demo_allowed
+    from sqlalchemy import text
+
+    db_ok = False
+    try:
+        db.session.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    status_code = 200 if db_ok else 503
     return json_success({
-        "status": "healthy",
+        "status": "healthy" if db_ok else "degraded",
         "service": "CirrhoCare AI",
         "version": "1.0.0",
         "demo_mode": is_demo_allowed(current_app),
+        "database": "connected" if db_ok else "disconnected",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    }, status_code=status_code)
 
 
 # -----------------------------------------------------------------------------
