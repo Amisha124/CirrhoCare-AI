@@ -16,10 +16,15 @@ class Config:
     is_render = bool(os.getenv("RENDER"))
     is_production = os.getenv("FLASK_ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
 
-    if raw_db_url and (raw_db_url.strip().startswith("postgres://") or raw_db_url.strip().startswith("postgresql://")):
-        db_url_clean = raw_db_url.strip()
-        if db_url_clean.startswith("postgres://"):
-            db_url_clean = "postgresql://" + db_url_clean[len("postgres://"):]
+    db_url_clean = raw_db_url.strip().strip("'\"") if raw_db_url else ""
+
+    if db_url_clean.startswith("postgres://"):
+        SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://" + db_url_clean[len("postgres://"):]
+        UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", DEMO_UPLOAD_FOLDER if DEMO_MODE else BASE_DIR / "instance" / "uploads"))
+    elif db_url_clean.startswith("postgresql://"):
+        SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://" + db_url_clean[len("postgresql://"):]
+        UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", DEMO_UPLOAD_FOLDER if DEMO_MODE else BASE_DIR / "instance" / "uploads"))
+    elif db_url_clean.startswith("postgresql+psycopg2://"):
         SQLALCHEMY_DATABASE_URI = db_url_clean
         UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", DEMO_UPLOAD_FOLDER if DEMO_MODE else BASE_DIR / "instance" / "uploads"))
     elif is_render or is_production:
