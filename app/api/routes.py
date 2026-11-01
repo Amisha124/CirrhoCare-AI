@@ -219,12 +219,11 @@ def auth_login():
 @api_bp.post("/auth/patient-login")
 def auth_patient_login():
     data = request.get_json(silent=True) or {}
-    name = str(data.get("name") or "").strip()
-    portal_id = str(data.get("portal_id") or "").strip().upper()
-    pin = str(data.get("pin") or data.get("password") or "").strip()
+    name = str(data.get("name") or data.get("patient_name") or data.get("full_name") or "").strip()
+    portal_id = str(data.get("portal_id") or data.get("patient_id") or "").strip().upper()
     remember = bool(data.get("remember", False))
 
-    error_msg = "Invalid Patient ID, Name, or Secret PIN"
+    error_msg = "Invalid Patient ID or Name. Please check your clinic registration slip."
 
     # IP-level rate limiting check
     client_ip = request.remote_addr or "127.0.0.1"
@@ -232,9 +231,9 @@ def auth_patient_login():
     if not ip_allowed:
         return json_error(ip_msg, 429)
 
-    if not name or not portal_id or not pin:
+    if not name or not portal_id:
         record_ip_attempt(client_ip)
-        return json_error(error_msg, 401)
+        return json_error("Both Full Name and Patient ID are required.", 400)
 
     # Locate patient record (Never create a patient record during login)
     patient = Patient.query.filter_by(portal_id=portal_id).first()
@@ -277,17 +276,6 @@ def auth_patient_login():
     if not user:
         user, _ = create_patient_portal_account(patient, send_invite=False)
 
-    if not user.check_password(pin):
-        record_ip_attempt(client_ip)
-        user.register_failed_attempt()
-        db.session.commit()
-        if user.is_locked:
-            return json_error(
-                "This account is temporarily locked due to multiple failed login attempts. Please try again in 15 minutes or contact clinic staff.",
-                429,
-            )
-        return json_error(error_msg, 401)
-
     if not user.active:
         return json_error("This patient account is currently inactive. Please contact clinic staff.", 403)
 
@@ -295,11 +283,10 @@ def auth_patient_login():
     db.session.commit()
 
     login_user(user, remember=remember)
-    log_activity("Patient Login", f"Patient {user.portal_id} ({user.name}) signed in via Patient ID")
+    log_activity("Patient Login", f"Patient {user.portal_id} ({user.name}) signed in via Full Name + Patient ID")
 
     return json_success({
         "user": serialize_user(user),
-        "must_change_password": bool(getattr(user, "must_change_password", False)),
         "message": "Login successful",
     })
 

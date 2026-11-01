@@ -324,16 +324,25 @@ class DemoLoginWorkflowTestCase(unittest.TestCase):
         self.assertEqual(pat_res.get_json().get("user", {}).get("role"), "patient")
         self.client.post("/api/auth/logout")
 
-        # 5. Invalid PIN rejected
-        bad_pin_res = self.client.post(
+        # 5. Invalid portal ID rejected
+        bad_portal_res = self.client.post(
             "/api/auth/patient-login",
             json={
                 "name": "Demo Patient",
-                "portal_id": "PAT-1001",
-                "pin": "WrongPin@999",
+                "portal_id": "PAT-9999",
             },
         )
-        self.assertEqual(bad_pin_res.status_code, 401)
+        self.assertEqual(bad_portal_res.status_code, 401)
+
+        # 6. Mismatched name rejected
+        bad_name_res = self.client.post(
+            "/api/auth/patient-login",
+            json={
+                "name": "Wrong Patient Name",
+                "portal_id": "PAT-1001",
+            },
+        )
+        self.assertEqual(bad_name_res.status_code, 401)
 
     def test_health_endpoint_runtime_reporting(self):
         """Verifies /api/health accurately reports runtime demo_mode and retains all existing fields."""

@@ -115,21 +115,11 @@ class ApiClient {
         method: 'GET',
       }),
 
-    patientLogin: (name: string, portal_id: string, rememberOrPin: boolean | string = false, optionalPin?: string) => {
-      let remember = false;
-      let pin: string | undefined = undefined;
-      if (typeof rememberOrPin === 'boolean') {
-        remember = rememberOrPin;
-        pin = optionalPin;
-      } else {
-        pin = rememberOrPin;
-        remember = Boolean(optionalPin);
-      }
-      return this.request<{ success: boolean; user: User; must_change_password: boolean; message: string }>('/auth/patient-login', {
+    patientLogin: (name: string, portal_id: string, remember: boolean = false) =>
+      this.request<{ success: boolean; user: User; message: string }>('/auth/patient-login', {
         method: 'POST',
-        body: JSON.stringify({ name, portal_id, remember, ...(pin ? { pin } : {}) }),
-      });
-    },
+        body: JSON.stringify({ name, portal_id, remember }),
+      }),
 
     changePin: (data: { current_pin: string; new_pin: string; confirm_pin?: string }) =>
       this.request<{ success: boolean; user: User; message: string }>('/auth/change-pin', {

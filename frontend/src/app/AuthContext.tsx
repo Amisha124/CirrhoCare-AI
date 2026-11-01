@@ -7,7 +7,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (identifier: string, password: string, remember?: boolean) => Promise<User>;
-  loginPatient: (name: string, portalId: string, remember?: boolean, pin?: string) => Promise<User>;
+  loginPatient: (name: string, portalId: string, remember?: boolean) => Promise<User>;
   demoLogin: (role: 'admin' | 'doctor' | 'labtech' | 'patient') => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -53,21 +53,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginPatient = async (
     name: string,
     portalId: string,
-    rememberOrPin?: boolean | string,
-    optionalPin?: string
+    remember = false
   ) => {
     setIsLoading(true);
     try {
-      let remember = false;
-      let pin: string | undefined = undefined;
-      if (typeof rememberOrPin === 'boolean') {
-        remember = rememberOrPin;
-        pin = optionalPin;
-      } else if (typeof rememberOrPin === 'string') {
-        pin = rememberOrPin;
-        remember = Boolean(optionalPin);
-      }
-      const res = await api.auth.patientLogin(name, portalId, remember, pin);
+      const res = await api.auth.patientLogin(name, portalId, remember);
       setUser(res.user);
       return res.user;
     } finally {

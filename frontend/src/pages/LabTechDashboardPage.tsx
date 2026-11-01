@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Copy,
   Download,
   Eye,
   FileCheck,
@@ -20,10 +21,14 @@ import {
   FlaskConical,
   HeartPulse,
   Info,
+  KeyRound,
   Loader2,
+  Lock,
   Plus,
+  Printer,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
   UploadCloud,
@@ -167,6 +172,9 @@ export const LabTechDashboardPage: React.FC = () => {
   const [regGender, setRegGender] = useState('Male');
   const [regPhone, setRegPhone] = useState('');
   const [isSubmittingRegister, setIsSubmittingRegister] = useState(false);
+  // State for post-registration access card
+  const [registeredAccess, setRegisteredAccess] = useState<{ patient: Patient; portalId: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<'id' | 'all' | null>(null);
 
   // Form 2: Enter Test Results state
   const [totalBilirubin, setTotalBilirubin] = useState('');
@@ -369,6 +377,49 @@ export const LabTechDashboardPage: React.FC = () => {
   }, []);
 
   // Handle Form 1: Register Patient
+  const handlePrintSlip = (patientName: string, portalId: string) => {
+    const printWindow = window.open('', '_blank', 'width=600,height=480');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>CirrhoCare AI - Patient Portal Access Slip</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 32px; color: #1e293b; background: #fff; }
+              .card { border: 2px dashed #94a3b8; border-radius: 12px; padding: 24px; max-width: 480px; margin: 0 auto; }
+              h2 { color: #1e40af; margin-top: 0; font-size: 20px; }
+              .field { margin-bottom: 16px; }
+              .label { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #64748b; }
+              .val { font-size: 18px; font-weight: bold; font-family: monospace; color: #0f172a; margin-top: 2px; }
+              .notice { font-size: 13px; color: #1e40af; background: #eff6ff; padding: 14px; border-radius: 8px; margin-top: 20px; line-height: 1.5; border: 1px solid #bfdbfe; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h2>CirrhoCare AI — Patient Portal Access Slip</h2>
+              <div class="field">
+                <div class="label">Patient Full Name</div>
+                <div class="val" style="font-family: inherit;">${patientName}</div>
+              </div>
+              <div class="field">
+                <div class="label">Patient Portal ID</div>
+                <div class="val" style="color: #2563eb;">${portalId}</div>
+              </div>
+              <div class="notice">
+                Please visit <strong>https://cirrhocare-ai.onrender.com/login</strong> and sign in under the <strong>Patient Portal</strong> tab using your <strong>Full Name</strong> and <strong>Patient Portal ID</strong> to view your clinical reports and care updates.
+              </div>
+            </div>
+            <script>
+              window.onload = function() { window.print(); window.close(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regFullName.trim()) {
@@ -397,10 +448,14 @@ export const LabTechDashboardPage: React.FC = () => {
         setRegFullName('');
         setRegAge('');
         setRegPhone('');
-        setIsRegisterOpen(false);
         await loadDashboardData(true);
         setActivePatient(res.patient);
         populateResultsForm(res.patient);
+
+        setRegisteredAccess({
+          patient: res.patient,
+          portalId: res.portal_id || res.patient.portal_id || '',
+        });
       } else {
         error((res as any).error || 'Patient registration failed.');
       }
@@ -1192,11 +1247,101 @@ export const LabTechDashboardPage: React.FC = () => {
           ========================================================================= */}
       <Modal
         isOpen={isRegisterOpen}
-        onClose={() => setIsRegisterOpen(false)}
-        title="Register New Patient"
-        description="Create an intake record for clinical laboratory testing."
+        onClose={() => {
+          setIsRegisterOpen(false);
+          setRegisteredAccess(null);
+        }}
+        title={registeredAccess ? "Patient Portal Access Created" : "Register New Patient"}
+        description={registeredAccess ? "Provide this Patient ID to the patient to sign in to their portal." : "Create an intake record for clinical laboratory testing."}
         size="md"
       >
+        {registeredAccess ? (
+          <div className="space-y-4">
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-900">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Patient Registered Successfully</p>
+                <p className="text-emerald-800 text-[11px] mt-0.5 leading-relaxed">
+                  Patient record created. The patient can now log in to the Patient Portal at <strong>/login</strong> using their Full Name and this Patient ID.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Patient Full Name</span>
+                <p className="text-base font-bold text-slate-900">{registeredAccess.patient.full_name}</p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200/60">
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between shadow-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider">Patient Portal ID</span>
+                    <span className="font-mono font-bold text-blue-700 text-lg tracking-wide">{registeredAccess.portalId}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(registeredAccess.portalId);
+                      setCopiedField('id');
+                      success('Patient ID copied');
+                      setTimeout(() => setCopiedField(null), 2000);
+                    }}
+                    className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition flex items-center gap-1.5 text-xs font-semibold"
+                    title="Copy Patient ID"
+                  >
+                    {copiedField === 'id' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedField === 'id' ? 'Copied!' : 'Copy ID'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-blue-50 rounded-lg border border-blue-200 text-[11px] text-blue-800 flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                <span>The patient signs in under the <strong>Patient Portal</strong> tab using their registered Name and this Patient ID.</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `CirrhoCare AI - Patient Portal Access Slip\nPatient Name: ${registeredAccess.patient.full_name}\nPatient ID: ${registeredAccess.portalId}\nPortal URL: ${window.location.origin}/login`;
+                  navigator.clipboard.writeText(text);
+                  setCopiedField('all');
+                  success('Access details copied to clipboard');
+                  setTimeout(() => setCopiedField(null), 2000);
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {copiedField === 'all' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedField === 'all' ? 'Copied Details!' : 'Copy Details'}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintSlip(registeredAccess.patient.full_name, registeredAccess.portalId)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print Slip
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterOpen(false);
+                    setRegisteredAccess(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#087CF0] text-white hover:bg-blue-600 transition cursor-pointer"
+                >
+                  Done & Close
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleRegisterSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1276,6 +1421,7 @@ export const LabTechDashboardPage: React.FC = () => {
             </button>
           </div>
         </form>
+        )}
       </Modal>
 
       {/* =========================================================================

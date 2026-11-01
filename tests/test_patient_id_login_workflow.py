@@ -124,13 +124,15 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
     def _login(self, email, password):
         return self.client.post("/api/auth/login", json={"identifier": email, "password": password})
 
-    def _patient_login(self, name, portal_id, pin, remember=False):
-        return self.client.post("/api/auth/patient-login", json={
+    def _patient_login(self, name, portal_id, pin=None, remember=False):
+        payload = {
             "name": name,
             "portal_id": portal_id,
-            "pin": pin,
             "remember": remember,
-        })
+        }
+        if pin is not None:
+            payload["pin"] = pin
+        return self.client.post("/api/auth/patient-login", json=payload)
 
     def _logout(self):
         return self.client.post("/api/auth/logout")
@@ -204,10 +206,10 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
         self.assertEqual(len(generated_ids), 5)
 
     # -------------------------------------------------------------------------
-    # 3. Correct Patient ID, Name, and PIN allow login
+    # 3. Correct Patient ID and Name allow login
     # -------------------------------------------------------------------------
     def test_patient_id_successful_login(self):
-        """Verify correct Patient ID, Name, and Secret PIN allow login and start session."""
+        """Verify correct Patient ID and Name allow login and start session."""
         self._login("labtech@clinic.org", "LabTechSecure@123")
         create_res = self.client.post("/api/patients", json={
             "full_name": "Aarav Sharma",
@@ -217,16 +219,14 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
         self.assertEqual(create_res.status_code, 201)
         data = create_res.get_json()
         portal_id = data["portal_id"]
-        initial_pin = data["initial_pin"]
         self._logout()
 
-        # Sign in as patient using exact credentials
-        login_res = self._patient_login("Aarav Sharma", portal_id, initial_pin)
+        # Sign in as patient using Name and Patient Portal ID
+        login_res = self._patient_login("Aarav Sharma", portal_id)
         self.assertEqual(login_res.status_code, 200)
         login_data = login_res.get_json()
         self.assertTrue(login_data["success"])
         self.assertEqual(login_data["user"]["portal_id"], portal_id)
-        self.assertTrue(login_data.get("must_change_password"))
 
         # Check authenticated session (/api/auth/me)
         me_res = self.client.get("/api/auth/me")
@@ -248,7 +248,6 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
         self.assertEqual(create_res.status_code, 201)
         data = create_res.get_json()
         portal_id = data["portal_id"]
-        initial_pin = data["initial_pin"]
         self._logout()
 
         # Sign in with lowercase, stripped honorific, or extra spaces
@@ -259,15 +258,15 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
             "Dr. Sunita Rao",
         ]
         for name_variant in test_variants:
-            login_res = self._patient_login(name_variant, portal_id, initial_pin)
+            login_res = self._patient_login(name_variant, portal_id)
             self.assertEqual(login_res.status_code, 200, f"Failed for name variant: {name_variant}")
             self._logout()
 
     # -------------------------------------------------------------------------
-    # 5. Incorrect PIN or mismatched identity is rejected with generic error
+    # 5. Mismatched identity or invalid Patient ID is rejected with generic error
     # -------------------------------------------------------------------------
     def test_incorrect_credentials_rejected_with_generic_error(self):
-        """Verify incorrect PIN or mismatched identity returns 401 with generic error."""
+        """Verify mismatched identity or invalid ID returns 401 with generic error."""
         self._login("labtech@clinic.org", "LabTechSecure@123")
         create_res = self.client.post("/api/patients", json={
             "full_name": "Kavita Devi",
@@ -275,27 +274,25 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
             "gender": "Female",
         })
         portal_id = create_res.get_json()["portal_id"]
-        initial_pin = create_res.get_json()["initial_pin"]
         self._logout()
 
-        # Case A: Wrong PIN
-        res_wrong_pin = self._patient_login("Kavita Devi", portal_id, "999999")
-        self.assertEqual(res_wrong_pin.status_code, 401)
-        self.assertIn("Invalid Patient ID, Name, or Secret PIN", res_wrong_pin.get_json()["error"])
-
-        # Case B: Wrong Name
-        res_wrong_name = self._patient_login("Wrong Name", portal_id, initial_pin)
+        # Case A: Wrong Name
+        res_wrong_name = self._patient_login("Wrong Name", portal_id)
         self.assertEqual(res_wrong_name.status_code, 401)
-        self.assertIn("Invalid Patient ID, Name, or Secret PIN", res_wrong_name.get_json()["error"])
+        self.assertIn("Invalid Patient ID or Name", res_wrong_name.get_json()["error"])
 
-        # Case C: Non-existent Patient ID
-        res_nonexistent = self._patient_login("Kavita Devi", "CC-2099-9999", initial_pin)
+        # Case B: Non-existent Patient ID
+        res_nonexistent = self._patient_login("Kavita Devi", "CC-2099-9999")
         self.assertEqual(res_nonexistent.status_code, 401)
-        self.assertIn("Invalid Patient ID, Name, or Secret PIN", res_nonexistent.get_json()["error"])
+        self.assertIn("Invalid Patient ID or Name", res_nonexistent.get_json()["error"])
 
-        # Case D: Missing PIN (Never authenticate based only on Name and ID)
-        res_no_pin = self._patient_login("Kavita Devi", portal_id, "")
-        self.assertEqual(res_no_pin.status_code, 401)
+        # Case C: Missing Name
+        res_no_name = self._patient_login("", portal_id)
+        self.assertEqual(res_no_name.status_code, 400)
+
+        # Case D: Missing Patient ID
+        res_no_id = self._patient_login("Kavita Devi", "")
+        self.assertEqual(res_no_id.status_code, 400)
 
     # -------------------------------------------------------------------------
     # 6. Rate limiting and temporary lockout against repeated failed attempts
@@ -309,20 +306,19 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
             "gender": "Male",
         })
         portal_id = create_res.get_json()["portal_id"]
-        initial_pin = create_res.get_json()["initial_pin"]
         self._logout()
 
-        # 5 failed attempts
+        # 5 failed attempts with mismatched name
         for attempt in range(5):
-            res = self._patient_login("Lockout Test", portal_id, f"00000{attempt}")
+            res = self._patient_login(f"Mismatched Name {attempt}", portal_id)
             if attempt < 4:
                 self.assertEqual(res.status_code, 401)
             else:
                 # 5th attempt locks the account
                 self.assertIn(res.status_code, (401, 429))
 
-        # 6th attempt should be rejected with 429 lockout
-        res_locked = self._patient_login("Lockout Test", portal_id, initial_pin)
+        # 6th attempt should be rejected with 429 lockout even with correct name
+        res_locked = self._patient_login("Lockout Test", portal_id)
         self.assertEqual(res_locked.status_code, 429)
         self.assertIn("temporarily locked", res_locked.get_json()["error"])
 
@@ -431,23 +427,25 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
         })
         self.assertEqual(fail_res.status_code, 400)
 
-        # Successfully change PIN
+        # Successfully change PIN (kept for future scope)
         success_res = self.client.post("/api/auth/change-pin", json={
             "current_pin": initial_pin,
             "new_pin": "NewPin@789",
             "confirm_pin": "NewPin@789",
         })
         self.assertEqual(success_res.status_code, 200)
+        self.assertFalse(success_res.get_json()["user"]["must_change_password"])
+
+        with self.app.app_context():
+            u = User.query.filter_by(portal_id=portal_id).first()
+            self.assertTrue(u.check_password("NewPin@789"))
+            self.assertFalse(u.check_password(initial_pin))
+
         self._logout()
 
-        # Old PIN now fails
-        old_login = self._patient_login("Vikram Singh", portal_id, initial_pin)
-        self.assertEqual(old_login.status_code, 401)
-
-        # New PIN succeeds and must_change_password is False
-        new_login = self._patient_login("Vikram Singh", portal_id, "NewPin@789")
+        # Simplified Name + Portal ID login succeeds directly
+        new_login = self._patient_login("Vikram Singh", portal_id)
         self.assertEqual(new_login.status_code, 200)
-        self.assertFalse(new_login.get_json()["must_change_password"])
 
     # -------------------------------------------------------------------------
     # 11. Staff-assisted PIN reset workflow
@@ -480,7 +478,7 @@ class PatientIdLoginWorkflowTestCase(unittest.TestCase):
         # Patient signs in with newly reset PIN
         login_res = self._patient_login("Reset Test Patient", portal_id, new_pin)
         self.assertEqual(login_res.status_code, 200)
-        self.assertTrue(login_res.get_json()["must_change_password"])
+        self.assertTrue(login_res.get_json()["success"])
 
         # Unauthorized patient cannot call reset-pin
         unauth_reset = self.client.post(f"/api/patients/{patient_id}/reset-pin")
