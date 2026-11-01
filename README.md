@@ -11,6 +11,49 @@ CirrhoCare AI is a full-stack, enterprise-grade healthcare SaaS platform designe
 
 CirrhoCare AI operates as a unified modern healthcare application combining a hardened Python Flask API backend and a high-performance React + TypeScript SPA frontend:
 
+```mermaid
+flowchart TD
+    subgraph ClientLayer["Frontend Presentation Layer (React 19 + TypeScript + Vite)"]
+        UI["User Browser / Client Session"]
+        AuthCtx["AuthContext & ProtectedRoute Guards"]
+        Dashboards["Clinical & Administrative Dashboards"]
+        Charts["Interactive Visualizations (Recharts)"]
+        ApiClient["Centralized REST Client (Fetch API + Credentials)"]
+        
+        UI --> AuthCtx
+        AuthCtx --> Dashboards
+        Dashboards --> Charts
+        Dashboards --> ApiClient
+    end
+
+    subgraph ServerLayer["Backend Application Layer (Python Flask WSGI / Waitress)"]
+        Router["Flask REST API Router (/api/*)"]
+        Security["RBAC Middleware & Session Control (@roles_required)"]
+        Controllers["Clinical Service Controllers (Patients, Lab, Appointments)"]
+        MLEngine["Random Forest ML Prediction Engine (Scikit-Learn)"]
+        DocGen["Automated Clinical PDF Generator (ReportLab)"]
+        
+        Router --> Security
+        Security --> Controllers
+        Controllers --> MLEngine
+        Controllers --> DocGen
+    end
+
+    subgraph DataLayer["Persistence & Storage Layer"]
+        ORM["SQLAlchemy ORM (Connection Pool & Migrations)"]
+        PGDB[("Production PostgreSQL Database (Supabase / Render)")]
+        LocalDB[("Local SQLite Database (instance/cirrhosis.db)")]
+        FileStore["Secure Medical Document Storage (instance/uploads)"]
+        
+        Controllers --> ORM
+        ORM --> PGDB
+        ORM --> LocalDB
+        DocGen --> FileStore
+    end
+
+    ApiClient -->|"HTTPS / REST Requests (JSON + Session Cookie)"| Router
+```
+
 - **Frontend (`/frontend`):**
   - **Framework:** React 19 + TypeScript + Vite
   - **Styling:** Tailwind CSS with custom healthcare palette
@@ -22,14 +65,60 @@ CirrhoCare AI operates as a unified modern healthcare application combining a ha
 
 - **Backend (`/app`):**
   - **Framework:** Python Flask with Blueprint architecture
-  - **Database:** SQLite (`instance/cirrhosis.db`) via SQLAlchemy ORM
+  - **Database:** SQLite (`instance/cirrhosis.db`) via SQLAlchemy ORM (local) / PostgreSQL (production)
   - **Authentication:** Flask-Login session cookies with role authorization
   - **Security:** Token-based password resets, protected medical document storage (`instance/uploads`), CSRF protection for HTML forms, and CORS/credentials for REST API.
   - **Machine Learning:** Scikit-learn Random Forest model (`liver_rf_model.pkl`) evaluating 17 clinical biomarkers for cirrhosis probability and risk tiering (Low, Medium, High).
 
 ---
 
-## 2. Default Ports & URLs
+## 2. UI & Clinical Workspaces Showcase
+
+Genuine interface captures taken directly from the production deployment at [https://cirrhocare-ai.onrender.com](https://cirrhocare-ai.onrender.com):
+
+### 1. Public Landing Page & Clinical Overview
+![CirrhoCare AI Public Landing Page](docs/screenshots/1_landing_page.png)
+*Public clinical overview detailing early liver cirrhosis detection, biomarker tracking features, and role-based portal access.*
+
+---
+
+### 2. Secure Multi-Role Authentication Portal
+![CirrhoCare AI Authentication Portal](docs/screenshots/2_login_page.png)
+*Unified authentication supporting clinical staff credentials, patient portal login with name/ID verification, and quick-login demo badges.*
+
+---
+
+### 3. System Administrator Control Center
+![System Administrator Dashboard](docs/screenshots/3_admin_dashboard.png)
+*Enterprise administrative oversight with real-time KPI metrics, active staff breakdown, user management, and security audit logs.*
+
+---
+
+### 4. Hepatologist / Clinical Specialist Workspace
+![Hepatologist Clinical Dashboard](docs/screenshots/4_doctor_dashboard.png)
+*Clinical triage queue categorizing high-risk cirrhosis patients, longitudinal biomarker inspection, and direct treatment coordination.*
+
+---
+
+### 5. Clinical Consultation & Appointment Requests
+![Doctor Appointment Requests](docs/screenshots/5_doctor_appointment_requests.png)
+*Consultation management console for reviewing, confirming, or rescheduling patient appointment requests in real time.*
+
+---
+
+### 6. Lab Technician Diagnostic Workspace
+![Lab Technician Workspace](docs/screenshots/6_labtech_dashboard.png)
+*Biomarker intake console evaluating 17 clinical laboratory parameters with automated AI risk prediction and clinical report PDF generation.*
+
+---
+
+### 7. Patient Health & Monitoring Portal
+![Patient Health Portal](docs/screenshots/7_patient_dashboard.png)
+*Secure, patient-facing health dashboard displaying cirrhosis risk evaluations, personal biomarker trends, active prescriptions, and diagnostic report downloads.*
+
+---
+
+## 3. Default Ports & URLs
 
 | Service | Address | Description |
 | :--- | :--- | :--- |
@@ -39,7 +128,7 @@ CirrhoCare AI operates as a unified modern healthcare application combining a ha
 
 ---
 
-## 3. Installation & Getting Started
+## 4. Installation & Getting Started
 
 ### Prerequisites
 - Python 3.10+
@@ -87,7 +176,7 @@ npm run build
 
 ---
 
-## 4. Demo Accounts & Credentials
+## 5. Demo Accounts & Credentials
 
 Created by `python seed.py`:
 
@@ -102,7 +191,7 @@ Created by `python seed.py`:
 
 ---
 
-## 5. Frontend Design System & Palette
+## 6. Frontend Design System & Palette
 
 CirrhoCare AI uses a tailored healthcare SaaS color palette:
 
@@ -119,7 +208,7 @@ CirrhoCare AI uses a tailored healthcare SaaS color palette:
 
 ---
 
-## 6. Project Structure
+## 7. Project Structure
 
 ```text
 ├── app/                        # Flask Backend Application
@@ -134,6 +223,9 @@ CirrhoCare AI uses a tailored healthcare SaaS color palette:
 │   ├── ml_model/               # Random Forest model & training scripts
 │   ├── models/                 # SQLAlchemy models (User, Patient, Prediction, etc.)
 │   └── utils/                  # Security tokens, logging, file uploads
+│
+├── docs/                       # Project documentation & verified captures
+│   └── screenshots/            # Verified production deployment screenshots
 │
 ├── frontend/                   # React + TypeScript SPA
 │   ├── src/
@@ -160,7 +252,7 @@ CirrhoCare AI uses a tailored healthcare SaaS color palette:
 
 ---
 
-## 7. Production Deployment (Unified Flask + React SPA)
+## 8. Production Deployment (Unified Flask + React SPA)
 
 CirrhoCare AI uses a unified deployment model where a production WSGI server (Waitress) serves both the compiled React SPA static bundle from `frontend/dist` and the secure REST API at `/api`.
 
@@ -230,7 +322,7 @@ Returns HTTP `200 OK` with JSON status payload:
 
 ---
 
-## 8. Database Integrity & Backup Procedures
+## 9. Database Integrity & Backup Procedures
 
 ### Active Database Path
 `instance/cirrhosis.db` (SQLite 3 with foreign key enforcement).
@@ -262,7 +354,7 @@ cp instance/cirrhosis_backup_YYYYMMDD_HHMMSS.db instance/cirrhosis.db
 
 ---
 
-## 9. Testing & Verification
+## 10. Testing & Verification
 
 All automated tests strictly execute against isolated temporary SQLite databases (in-memory `:memory:` or temporary files) and **never mutate active or demo databases** (`instance/cirrhosis.db` and `instance/demo_cirrhosis.db`).
 
@@ -404,7 +496,7 @@ npm run test:e2e
 
 ---
 
-## 10. Troubleshooting & FAQ
+## 11. Troubleshooting & FAQ
 
 - **SPA Page Refresh returns 404?** Ensure `frontend/dist` was built before starting Flask (`cd frontend && npm run build`).
 - **Session lost immediately after login?** If running locally over HTTP, ensure `SESSION_COOKIE_SECURE=false` in `.env`. Set to `true` only when HTTPS is active.
